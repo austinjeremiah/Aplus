@@ -98,6 +98,27 @@ def _cloudflare() -> list[ProviderSlot]:
     return slots
 
 
+def _pollinations() -> ProviderSlot | None:
+    """Keyless free tier — the link that cannot run dry.
+
+    Enabled by default precisely because it needs no credentials: it is the
+    only provider that survives both an unfunded account and an exhausted
+    daily allocation, which is the exact state the others were in during
+    development.
+    """
+    if not settings.enable_pollinations:
+        return None
+    from app.services.pollinations_provider import PollinationsImageProvider
+
+    return ProviderSlot(
+        key="pollinations",
+        provider=PollinationsImageProvider(),
+        model=settings.pollinations_model,
+        est_cost_usd=0.0,
+        wants_dimensions=True,
+    )
+
+
 def _replicate() -> ProviderSlot | None:
     if not settings.replicate_api_token:
         return None
@@ -148,7 +169,7 @@ def simulated_chain() -> tuple[ProviderSlot, ...]:
     )
 
 
-_BUILDERS = (_gmicloud, _cloudflare, _replicate, _openai)
+_BUILDERS = (_gmicloud, _cloudflare, _pollinations, _replicate, _openai)
 
 
 @lru_cache(maxsize=1)

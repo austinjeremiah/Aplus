@@ -11,10 +11,13 @@ Backends, in preference order:
 
 1. ``gmicloud``   — sponsor credits; hosts gpt-4o and gemini-flash. Best
                     quality, but 402s when the account has no balance.
-2. ``cloudflare`` — llama-3.2-11b-vision on the free tier. Verified to read
+2. ``google``     — Gemini via the OpenAI-compatible endpoint. Free tier
+                    covers vision *input*, and unlike Workers AI it has no
+                    daily neuron budget to exhaust.
+3. ``cloudflare`` — llama-3.2-11b-vision on the free tier. Verified to read
                     rendered text correctly (~15 neurons/call, so roughly 600
-                    calls/day free).
-3. ``openai``     — only when a key exists.
+                    calls/day free) until the shared 10k/day runs out.
+4. ``openai``     — only when a key exists.
 """
 
 from __future__ import annotations
@@ -211,6 +214,15 @@ def _backends() -> list[VisionBackend]:
         candidates.append(
             OpenAICompatVision(
                 "gmicloud", "https://api.gmi-serving.com/v1", settings.gmi_api_key, "openai/gpt-4o"
+            )
+        )
+    if settings.google_api_key:
+        candidates.append(
+            OpenAICompatVision(
+                "google",
+                "https://generativelanguage.googleapis.com/v1beta/openai",
+                settings.google_api_key,
+                settings.google_vision_model,
             )
         )
     candidates.append(CloudflareVision())

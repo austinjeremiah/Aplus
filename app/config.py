@@ -50,6 +50,11 @@ class Settings(BaseSettings):
     def cf_model_list(self) -> list[str]:
         return [m.strip() for m in self.cf_image_models.split(",") if m.strip()]
 
+    # Keyless free provider — on by default so the chain always has a link
+    # that cannot be disabled by billing or a daily cap.
+    enable_pollinations: bool = True
+    pollinations_model: str = "flux"
+
     replicate_api_token: str = ""
     replicate_image_model: str = "black-forest-labs/flux-schnell"
 
@@ -58,6 +63,11 @@ class Settings(BaseSettings):
     groq_vision_model: str = "meta-llama/llama-4-scout-17b-16e-instruct"
     groq_base_url: str = "https://api.groq.com/openai/v1"
     openai_api_key: str = ""
+    # Google AI Studio. Free tier covers multimodal *input* (vision), which is
+    # what the judge needs — only image *generation* is paid there. This is the
+    # only free vision judge that is not subject to a daily neuron budget.
+    google_api_key: str = ""
+    google_vision_model: str = "gemini-2.5-flash"
 
     # --- app ---
     app_db_path: str = "data/aplusplus.db"
@@ -116,6 +126,8 @@ class Settings(BaseSettings):
             enabled.append("gmicloud")
         if self.cf_account_id and self.cf_api_token:
             enabled.append("cloudflare")
+        if self.enable_pollinations:
+            enabled.append("pollinations")
         if self.replicate_api_token:
             enabled.append("replicate")
         if self.openai_api_key:
