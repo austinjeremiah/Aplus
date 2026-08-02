@@ -19,13 +19,13 @@ export default function Hero() {
               <path d="M28.501 0.356445C35.0302 0.356505 40.9237 1.74032 45.1719 3.96094C49.4372 6.19053 51.9541 9.2087 51.9541 12.4463C51.9541 15.6838 49.4372 18.7021 45.1719 20.9316C40.9237 23.1522 35.0302 24.5361 28.501 24.5361C21.9716 24.5361 16.0774 23.1523 11.8291 20.9316C7.56383 18.7021 5.04692 15.6838 5.04688 12.4463C5.04688 9.20872 7.56383 6.19053 11.8291 3.96094C16.0774 1.74026 21.9716 0.356445 28.501 0.356445Z" stroke="currentColor" strokeWidth="0.7125" data-svg-origin="28.50049114227295 12.44627258181572" transform="matrix(1,0,0,1,0,0)" />
             </svg>
             <h1 className="hero_home_content_p u-text-style-h4">
-              We design change-making
-              website experiences that finally
-              reflect what you've actually built.
+              Don&rsquo;t build an AI image generator.
+              Build the production system behind
+              AI image generation.
               <br />
-              For established brands whose
-              reputation has outgrown their
-              digital presence.
+              A++ is compliance, provenance and
+              multi-provider reliability for
+              Amazon A+ Content.
             </h1>
           </div>
           <div className="hero_home_bottom">

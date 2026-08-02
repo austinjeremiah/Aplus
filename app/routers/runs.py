@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import logging
 
+from urllib.parse import quote
+
 from fastapi import APIRouter, HTTPException, Query
 
 from app import db
@@ -15,6 +17,20 @@ router = APIRouter(tags=["runs"])
 # fully evaluated (judge unreachable), which is deliberately distinct from
 # "passed" — see ComplianceReport.status.
 REVIEWABLE = {"failed", "needs_review"}
+
+
+def _display_url(row: dict) -> str | None:
+    """Browser-loadable URL for the asset.
+
+    ``asset_url`` is the durable B2 URL recorded in the manifest — correct for
+    provenance, but unreadable from a browser because the bucket is private.
+    The API keeps the manifest value untouched and hands the UI a proxied URL
+    instead, so images render without making the bucket public.
+    """
+    key = row.get("asset_key")
+    if key:
+        return f"/asset?key={quote(key, safe='')}"
+    return row.get("asset_url")
 
 
 def _shape(row: dict) -> dict:
@@ -32,7 +48,8 @@ def _shape(row: dict) -> dict:
         "model": row.get("model"),
         "status": row.get("status"),
         "review_decision": row.get("review_decision"),
-        "asset_url": row.get("asset_url"),
+        "asset_url": _display_url(row),
+        "durable_url": row.get("asset_url"),
         "asset_sha256": row.get("asset_sha256"),
         "manifest_uri": row.get("manifest_uri"),
         "canonical_hash": row.get("canonical_hash"),

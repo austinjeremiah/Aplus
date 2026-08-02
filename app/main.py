@@ -105,6 +105,40 @@ def modules() -> list[dict]:
     return module_options()
 
 
+@app.get("/asset", tags=["meta"])
+def asset_proxy(key: str):
+    """Stream a stored asset through the API.
+
+    The B2 bucket is private, so its object URLs 401 in a browser and every
+    image in the UI would break. Presigned URLs would work but expire, which
+    makes them unusable in a manifest or a shared link. Proxying keeps the
+    bucket private, keeps the durable URL stable in the manifest, and still
+    lets the gallery render.
+    """
+    import mimetypes
+
+    from fastapi import HTTPException
+    from fastapi.responses import Response
+
+    from app.services.storage import get_backend
+
+    if not key or ".." in key:
+        raise HTTPException(400, "invalid key")
+    try:
+        data = get_backend().get(key)
+    except Exception as exc:
+        raise HTTPException(404, f"no object at {key}") from exc
+
+    media_type = mimetypes.guess_type(key)[0] or "application/octet-stream"
+    return Response(
+        content=data,
+        media_type=media_type,
+        # Assets are immutable once written — the key contains either the run
+        # id or the content hash — so they can be cached hard.
+        headers={"Cache-Control": "public, max-age=31536000, immutable"},
+    )
+
+
 @app.get("/local-assets/{key:path}", tags=["meta"], include_in_schema=False)
 def local_asset(key: str):
     """Serve assets when running on the filesystem backend instead of B2.

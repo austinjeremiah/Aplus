@@ -36,3 +36,8 @@ build/
 Thumbs.db
 .idea/
 .vscode/
+
+# --- next build output ---
+frontend/.next/
+frontend/out/
+frontend/.env.local

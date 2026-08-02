@@ -1,27 +1,19 @@
 import type { Metadata } from 'next';
-import SiteScripts from '@/components/SiteScripts';
-import TransitionScreen from '@/components/TransitionScreen';
-import Cursor from '@/components/Cursor';
-import AboutModal from '@/components/AboutModal';
-import Menu from '@/components/Menu';
-import GrainOverlay from '@/components/GrainOverlay';
-import FixedUi from '@/components/FixedUi';
-import Guides from '@/components/Guides';
 
 const description =
-  'We building change-making branding and websites for established creative brands who refuse to be underestimated. Trusted by OH Architecture, Vinamilk, and many other leading brands.';
+  'A++ is a compliance and governance system for Amazon A+ Content image generation. A real rubric against Amazon rules, multi-provider fallback with full retry lineage, dual Backblaze B2 storage, and a public provenance verify page. Built on Genblaze + Backblaze B2.';
 
 export const metadata: Metadata = {
-  title: 'MONOLOG | Brand and Web Design Studio founded By Huy',
+  title: 'A++ | Compliance & Provenance for Amazon A+ Content',
   description,
   openGraph: {
-    title: 'MONOLOG | Brand and Web Design Studio founded By Huy',
+    title: 'A++ | Compliance & Provenance for Amazon A+ Content',
     description,
     type: 'website',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'MONOLOG | Brand and Web Design Studio founded By Huy',
+    title: 'A++ | Compliance & Provenance for Amazon A+ Content',
     description,
   },
 };
@@ -46,17 +38,9 @@ export default function RootLayout({
         <link rel="stylesheet" href="/styles/webflow.css" precedence="high" />
         <link rel="stylesheet" href="/styles/inline.css" precedence="high" />
 
-        <TransitionScreen />
-        <Cursor />
-        <AboutModal />
-        <Menu />
-        <GrainOverlay />
-        <FixedUi />
-        <Guides />
 
         {children}
 
-        <SiteScripts />
       </body>
     </html>
   );
