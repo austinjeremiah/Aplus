@@ -77,44 +77,51 @@ class LoopResult:
         }
 
 
-def _corrective_prompt(module_id: str, brief: str, report: ComplianceReport) -> str:
-    """Re-prompt that names the specific failure instead of retrying blindly.
+def _corrective_prompt(
+    module_id: str, brief: str, report: ComplianceReport
+) -> tuple[str, str]:
+    """Turn a rejection into a corrected (positive_prompt, extra_negatives).
 
     Repeating an identical prompt and hoping for different sampling is what
-    makes naive retry loops burn budget. Feeding the violation back turns the
-    retry into a correction.
+    makes naive retry loops burn budget, so the violation must feed back. But
+    it must feed back into the NEGATIVE prompt, never the positive one:
+    "remove the brand mark amazon" puts the token "amazon" straight back in
+    front of a model that cannot process negation, which reproduces the exact
+    violation being corrected. Positive text only ever gains *additive*
+    descriptions of what should be there instead.
     """
-    base = build_prompt(module_id, brief)
-    fixes = []
-    for v in report.errors:
-        if v.rule == "pricing":
-            fixes.append(
-                f'remove all pricing and discount text (the previous attempt showed "{v.evidence}")'
-            )
-        elif v.rule == "superlative":
-            fixes.append(f'remove ranking or award claims (previously "{v.evidence}")')
-        elif v.rule == "competitor":
-            fixes.append(f'remove the third-party brand mark "{v.evidence}"')
-        elif v.rule == "contact_info":
-            fixes.append(f'remove contact details or URLs (previously "{v.evidence}")')
-        elif v.rule == "warranty":
-            fixes.append(f'remove warranty or shipping claims (previously "{v.evidence}")')
-        elif v.rule.startswith("safe_zone"):
-            spec = get_module(module_id)
-            fixes.append(
-                f"keep the bottom {spec['safe_zone_pct']}% of the frame completely free of "
-                "text and faces — use empty background there"
-            )
-        elif v.rule == "dimensions":
-            fixes.append("render at the exact module canvas size")
+    spec = get_module(module_id)
+    positive_additions: list[str] = []
+    negatives: list[str] = []
 
-    if not fixes:
-        return base
-    return (
-        f"{base}\n\nThe previous attempt was REJECTED for Amazon A+ policy violations. "
-        f"You must fix all of the following: {'; '.join(fixes)}. "
-        "Produce a clean image with no overlaid promotional text of any kind."
-    )
+    for v in report.errors:
+        evidence = v.evidence.strip()
+        # The offending text itself is the single most valuable negative token.
+        if evidence and len(evidence) < 60:
+            negatives.append(evidence)
+
+        if v.rule == "pricing":
+            negatives += ["price", "discount", "percent off", "sale badge"]
+        elif v.rule == "superlative":
+            negatives += ["award badge", "ranking badge", "best seller label"]
+        elif v.rule == "competitor":
+            negatives += ["brand name", "brand logo", "engraved logo", "printed label"]
+            positive_additions.append("completely unbranded plain product surface")
+        elif v.rule == "contact_info":
+            negatives += ["website url", "phone number", "QR code", "email address"]
+        elif v.rule == "warranty":
+            negatives += ["warranty badge", "guarantee seal", "shipping banner"]
+        elif v.rule.startswith("safe_zone"):
+            negatives += ["text at bottom", "label at bottom", "caption at bottom"]
+            positive_additions.append(
+                f"the lower {spec['safe_zone_pct']}% of the frame is empty "
+                "seamless background with nothing in it"
+            )
+
+    prompt = build_prompt(module_id, brief)
+    if positive_additions:
+        prompt = f"{prompt} {'. '.join(dict.fromkeys(positive_additions))}."
+    return prompt, ", ".join(dict.fromkeys(negatives))
 
 
 def _local_copy(outcome: GenerationOutcome) -> Path | None:
@@ -161,6 +168,7 @@ def generate_compliant(
 
     parent_outcome: GenerationOutcome | None = None
     prompt_override: str | None = None
+    negative_extra: str = ""
 
     for attempt_no in range(1, budget + 2):  # first attempt + retries
         if demo_violation and attempt_no == 1:
@@ -186,6 +194,7 @@ def generate_compliant(
             parent_run=parent_outcome.result if parent_outcome else None,
             attempt=attempt_no,
             prompt_override=prompt_override,
+            negative_extra=negative_extra,
             force_fail_first=force_fail_first and attempt_no == 1,
             chain=chain,
         )
@@ -217,9 +226,17 @@ def generate_compliant(
         result.attempts.append(Attempt(outcome, report))
         db.update_run(
             outcome.run_id,
-            status="passed" if report.passed else "failed",
+            status=report.status,
             compliance=report.as_dict(),
         )
+
+        if report.status == "needs_review":
+            # Regenerating cannot fix an unreachable judge; escalate instead.
+            logger.warning(
+                "%s/%s attempt %d could not be fully audited (%s) — routing to review",
+                asin, module_id, attempt_no, report.notes,
+            )
+            break
 
         if report.passed:
             result.approved = True
@@ -240,6 +257,6 @@ def generate_compliant(
             report.summary(),
         )
         parent_outcome = outcome
-        prompt_override = _corrective_prompt(module_id, brief, report)
+        prompt_override, negative_extra = _corrective_prompt(module_id, brief, report)
 
     return result

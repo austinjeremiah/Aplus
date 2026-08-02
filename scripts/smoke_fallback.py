@@ -13,7 +13,7 @@ import sys
 
 from app import db
 from app.config import settings
-from app.services.pipeline import generate_module
+from app.services.pipeline import dead_providers, generate_module
 from app.services.providers import chain_summary, provider_chain, simulated_chain
 from app.services.storage import verify_manifest
 
@@ -63,11 +63,20 @@ def main() -> int:
     # logic under test — chain walk, failure bookkeeping, lineage link — is
     # credential-independent. Use the simulated chain when the real one is
     # too short, so this assertion always actually runs.
-    real_chain = provider_chain()
-    if len(real_chain) >= 2:
-        chain, origin = real_chain, "real providers"
+    # Only count providers that are actually live. Circuit-broken ones are
+    # skipped at generation time, and the terminal local-mock ignores model
+    # names entirely, so sabotaging it proves nothing. If fewer than two real
+    # providers can be reached, fall back to the deterministic simulated chain
+    # so this assertion still runs for real.
+    dead = dead_providers()
+    live = [s for s in provider_chain() if s.key not in dead and not s.key.endswith("mock")]
+    if len(live) >= 2:
+        chain, origin = tuple(live), f"real providers ({len(live)} live)"
     else:
-        chain, origin = simulated_chain(), "simulated chain (no multi-provider creds yet)"
+        chain, origin = simulated_chain(), (
+            f"simulated chain — only {len(live)} live provider(s): "
+            f"{', '.join(f'{k} {v}' for k, v in dead.items()) or 'none configured'}"
+        )
     print(f"  using        : {origin}")
     print(f"  chain        : {' -> '.join(s.key for s in chain)}")
 
@@ -77,7 +86,7 @@ def main() -> int:
         brief=BRIEF,
         parent_run=first.result,
         attempt=2,
-        force_fail_first=(chain is real_chain),
+        force_fail_first=(origin.startswith("real")),
         chain=chain,
     )
     if not fallback.ok:

@@ -32,6 +32,36 @@ from app.services.storage import hierarchical_sink
 
 logger = logging.getLogger(__name__)
 
+# Providers whose failure retrying cannot fix — an unfunded account, a revoked
+# key. Skipped for the rest of the process rather than re-attempted on every
+# generation and every retry inside it, where each dead call adds seconds to
+# the critical path. Cleared on restart, so credits arriving later just work.
+_DEAD_PROVIDERS: dict[str, str] = {}
+
+_PERMANENT_MARKERS = (
+    "insufficient balance",
+    "payment required",
+    "402",
+    "invalid api key",
+    "unauthorized",
+    "401",
+    "quota exceeded",
+    "daily free allocation",
+)
+
+
+def _permanent_failure(message: str) -> str | None:
+    lowered = message.lower()
+    for marker in _PERMANENT_MARKERS:
+        if marker in lowered:
+            return marker
+    return None
+
+
+def dead_providers() -> dict[str, str]:
+    """Providers disabled this process, and why — surfaced at /health."""
+    return dict(_DEAD_PROVIDERS)
+
 
 @dataclass
 class AttemptError:
@@ -85,30 +115,46 @@ class GenerationOutcome:
         }
 
 
-def build_prompt(module_id: str, brief: str) -> str:
-    """Compose the brief into a module-aware, rule-aware prompt.
+# Prohibitions belong here, never in the positive prompt. Diffusion models do
+# not process negation: writing "no discount badges, no percentage-off text"
+# into the prompt reliably produces discount badges and percentage-off text,
+# because the tokens are present and the "no" is ignored. Observed directly —
+# the first version of build_prompt listed the rules inline and every
+# generation came back with promotional overlays the rubric then rejected.
+NEGATIVE_PROMPT = (
+    "text, words, letters, typography, caption, watermark, signature, logo, "
+    "brand mark, price tag, discount badge, percentage off, sale sticker, "
+    "promotional banner, award badge, best seller badge, star rating, "
+    "QR code, URL, website address, phone number, packaging copy, "
+    "cluttered background, busy composition, low quality, blurry, distorted"
+)
 
-    The negative constraints are not decoration — they front-load the same
-    rules the compliance engine scores against, so the first attempt has a
-    fair chance of passing rather than being set up to fail.
+
+def build_prompt(module_id: str, brief: str) -> str:
+    """Compose the brief into a purely descriptive, module-aware prompt.
+
+    Deliberately says nothing about what must be absent — that is the
+    negative prompt's job (see NEGATIVE_PROMPT above).
     """
     spec = get_module(module_id)
+    # Never name a marketplace or retailer here. "Professional Amazon product
+    # photography" made the model emboss "amazon" onto the product itself —
+    # which the rubric then correctly rejected as a competitor mark inside the
+    # mobile safe zone. Any brand token in the prompt is a brand token the
+    # model may render.
     return (
-        f"Professional Amazon A+ Content {spec['label'].lower()} image, "
-        f"{spec['aspect_ratio']} aspect ratio.\n"
-        f"Product brief: {brief.strip()}\n"
-        "Style: clean commercial product photography, even studio lighting, "
-        "uncluttered composition, high detail, neutral background.\n"
-        "Strict constraints: no pricing, no discount badges, no percentage-off "
-        "text, no promotional claims, no competitor logos or brand marks, no "
-        "URLs, no contact details, no award or best-seller badges. "
-        f"Keep all text and faces out of the bottom {spec['safe_zone_pct']}% of "
-        "the frame."
+        f"Professional e-commerce product photography for a {spec['label'].lower()}. "
+        f"{brief.strip()}. "
+        "Clean commercial studio lighting, uncluttered composition, sharp focus, "
+        "high detail, plain neutral seamless background, unbranded product, "
+        "product centred in the upper two thirds of the frame with empty "
+        "background along the bottom edge."
     )
 
 
-def _step_params(slot: ProviderSlot, spec: dict) -> dict[str, Any]:
+def _step_params(slot: ProviderSlot, spec: dict, negative_extra: str = "") -> dict[str, Any]:
     """Translate the module spec into whichever params this provider takes."""
+    negative = f"{NEGATIVE_PROMPT}, {negative_extra}" if negative_extra else NEGATIVE_PROMPT
     if slot.wants_dimensions:
         # Workers AI caps generated images at 1024px per side. Clamping each
         # axis independently would silently change the aspect ratio (a
@@ -119,8 +165,9 @@ def _step_params(slot: ProviderSlot, spec: dict) -> dict[str, Any]:
         return {
             "width": max(64, int(round(w * scale / 8)) * 8),
             "height": max(64, int(round(h * scale / 8)) * 8),
+            "negative_prompt": negative,
         }
-    return {"aspect_ratio": spec["aspect_ratio"]}
+    return {"aspect_ratio": spec["aspect_ratio"], "negative_prompt": negative}
 
 
 def _extract_asset(result: PipelineResult) -> tuple[str | None, str | None, str | None]:
@@ -154,6 +201,7 @@ def generate_module(
     parent_run_id: str | None = None,
     attempt: int = 1,
     prompt_override: str | None = None,
+    negative_extra: str = "",
     force_fail_first: bool = False,
     chain: tuple[ProviderSlot, ...] | None = None,
 ) -> GenerationOutcome:
@@ -173,10 +221,17 @@ def generate_module(
     failures: list[AttemptError] = []
     effective_parent_id = parent_run_id or (parent_run.run.run_id if parent_run else None)
 
+    sabotaged = False
     for position, slot in enumerate(chain):
+        if slot.key in _DEAD_PROVIDERS:
+            continue
         model = slot.model
-        if force_fail_first and position == 0:
+        # Sabotage the first provider actually *attempted*, not chain position
+        # 0 — circuit-broken providers are skipped, so position 0 is often
+        # never tried and the fallback would go unexercised.
+        if force_fail_first and not sabotaged:
             model = f"{slot.model}-DOES-NOT-EXIST"
+            sabotaged = True
 
         sink = hierarchical_sink(tenant_id=asin)  # single-use: fresh per attempt
         pipeline = Pipeline(f"aplus-{module_id}", tenant_id=asin)
@@ -194,13 +249,21 @@ def generate_module(
             prompt=prompt,
             modality=Modality.IMAGE,
             metadata={"module_id": module_id, "asin": asin},
-            **_step_params(slot, spec),
+            **_step_params(slot, spec, negative_extra),
         )
 
         try:
             result = pipeline.run(sink=sink, raise_on_failure=True, timeout=180)
         except (GenblazeError, Exception) as exc:  # noqa: BLE001 - chain must survive anything
-            logger.warning("provider %s failed (%s): %s", slot.key, model, exc)
+            reason = _permanent_failure(str(exc))
+            if reason and not force_fail_first:
+                # Don't disable on a deliberately sabotaged model slug.
+                _DEAD_PROVIDERS[slot.key] = reason
+                logger.warning(
+                    "provider %s disabled for this process (%s)", slot.key, reason
+                )
+            else:
+                logger.warning("provider %s failed (%s): %s", slot.key, model, exc)
             failures.append(AttemptError(slot.key, model, str(exc)[:500]))
             _record_failed_attempt(
                 asin=asin,

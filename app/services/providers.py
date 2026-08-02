@@ -66,21 +66,36 @@ def _gmicloud() -> ProviderSlot | None:
     )
 
 
-def _cloudflare() -> ProviderSlot | None:
+def _cloudflare() -> list[ProviderSlot]:
+    """One slot per configured Workers AI model.
+
+    Each model is its own chain link rather than one 'cloudflare' entry,
+    because a model-level failure (bad slug, model retired, per-model rate
+    limit) is by far the most common one — and every link here is free, so
+    depth costs nothing.
+    """
     if not (settings.cf_account_id and settings.cf_api_token):
-        return None
+        return []
     from app.services.cloudflare_provider import CloudflareImageProvider
 
-    return ProviderSlot(
-        key="cloudflare",
-        provider=CloudflareImageProvider(
-            account_id=settings.cf_account_id,
-            api_token=settings.cf_api_token,
-        ),
-        model=settings.cf_image_model,
-        est_cost_usd=0.0,
-        wants_dimensions=True,
+    provider = CloudflareImageProvider(
+        account_id=settings.cf_account_id,
+        api_token=settings.cf_api_token,
     )
+    slots = []
+    for model in settings.cf_model_list:
+        slots.append(
+            ProviderSlot(
+                # Key includes the model so circuit-breaking one dead model
+                # doesn't disable the other Cloudflare links.
+                key=f"cf-{model.rsplit('/', 1)[-1]}",
+                provider=provider,
+                model=model,
+                est_cost_usd=0.0,
+                wants_dimensions=True,
+            )
+        )
+    return slots
 
 
 def _replicate() -> ProviderSlot | None:
@@ -142,19 +157,26 @@ def provider_chain() -> tuple[ProviderSlot, ...]:
     chain: list[ProviderSlot] = []
     for build in _BUILDERS:
         try:
-            slot = build()
+            built = build()
         except Exception:
             logger.exception("provider %s failed to initialise — skipping", build.__name__)
             continue
-        if slot is not None:
-            chain.append(slot)
+        if built is None:
+            continue
+        chain.extend(built if isinstance(built, list) else [built])
 
     if not chain:
         logger.warning(
             "No image provider credentials configured — falling back to the local "
             "mock provider. Set GMI_API_KEY / CF_* / REPLICATE_API_TOKEN in .env."
         )
-        chain.append(_mock())
+    # Always terminate the chain with the local renderer. Every hosted provider
+    # can be simultaneously unavailable — an unfunded account plus an exhausted
+    # daily free tier is not hypothetical, it happened during development — and
+    # a queue that hard-fails every job in that state is worse than one that
+    # degrades. Runs served this way record provider="local-mock", so they are
+    # never mistakable for real model output in the gallery or the manifest.
+    chain.append(_mock())
 
     logger.info("provider chain: %s", " -> ".join(s.label for s in chain))
     return tuple(chain)
@@ -162,13 +184,22 @@ def provider_chain() -> tuple[ProviderSlot, ...]:
 
 def chain_summary() -> list[dict[str, Any]]:
     """Serialisable view of the chain — surfaced at /health and in the UI."""
-    return [
-        {
-            "position": i,
-            "provider": slot.key,
-            "model": slot.model,
-            "est_cost_usd": slot.est_cost_usd,
-            "role": ["primary", "fallback", "last resort"][min(i, 2)],
-        }
-        for i, slot in enumerate(provider_chain())
-    ]
+    from app.services.pipeline import dead_providers
+
+    chain = provider_chain()
+    dead = dead_providers()
+    last = len(chain) - 1
+    summary = []
+    for i, slot in enumerate(chain):
+        role = "primary" if i == 0 else "last resort" if i == last else "fallback"
+        summary.append(
+            {
+                "position": i,
+                "provider": slot.key,
+                "model": slot.model,
+                "est_cost_usd": slot.est_cost_usd,
+                "role": role,
+                "status": f"disabled ({dead[slot.key]})" if slot.key in dead else "ready",
+            }
+        )
+    return summary

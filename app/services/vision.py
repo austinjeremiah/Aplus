@@ -229,13 +229,21 @@ def _backends() -> list[VisionBackend]:
 # several seconds per generation, plus a wall of identical warnings.
 _DISABLED: dict[str, str] = {}
 
-_PERMANENT = (401, 402, 403)
+# 429 is normally transient, but Workers AI returns it for "daily free
+# allocation exhausted", which will not clear until UTC midnight. Treating
+# it as retryable means every call pays a full round-trip to learn nothing.
+_PERMANENT = (401, 402, 403, 429)
 
 
 def _is_permanent(exc: Exception) -> str | None:
     status = getattr(getattr(exc, "response", None), "status_code", None)
     if status in _PERMANENT:
-        return {401: "unauthorized", 402: "no credit balance", 403: "forbidden"}[status]
+        return {
+            401: "unauthorized",
+            402: "no credit balance",
+            403: "forbidden",
+            429: "daily quota exhausted",
+        }[status]
     return None
 
 

@@ -98,9 +98,26 @@ class ComplianceReport:
     def warnings(self) -> list[Violation]:
         return [v for v in self.violations if v.severity == "warning"]
 
+    @property
+    def status(self) -> str:
+        """passed | failed | needs_review.
+
+        ``needs_review`` exists because "we found no violations" and "we could
+        not check" must never collapse into the same verdict. When the judge
+        is unreachable — quota exhausted, no credit, network down — only the
+        deterministic rules ran, and reporting that as a clean pass would ship
+        an unaudited image while claiming it was audited. That is the single
+        most damaging thing a compliance system can do, so it routes to the
+        human review queue instead.
+        """
+        if self.errors:
+            return "failed"
+        return "needs_review" if self.degraded else "passed"
+
     def as_dict(self) -> dict[str, Any]:
         return {
             "passed": self.passed,
+            "status": self.status,
             "violations": [v.as_dict() for v in self.violations],
             "error_count": len(self.errors),
             "warning_count": len(self.warnings),
@@ -112,9 +129,11 @@ class ComplianceReport:
         }
 
     def summary(self) -> str:
-        if self.passed:
-            return "PASS" + (f" ({len(self.warnings)} warning)" if self.warnings else "")
-        return f"FAIL — {'; '.join(v.rule for v in self.errors)}"
+        if self.errors:
+            return f"FAIL — {'; '.join(v.rule for v in self.errors)}"
+        if self.degraded:
+            return f"NEEDS REVIEW — {self.notes or 'checks incomplete'}"
+        return "PASS" + (f" ({len(self.warnings)} warning)" if self.warnings else "")
 
 
 def _crop_safe_zone(path: Path, spec: dict) -> Path | None:
@@ -240,7 +259,8 @@ def compliance_report(
             else:
                 notes = "safe-zone check unavailable"
 
-    passed = not any(v.severity == "error" for v in violations)
+    # A degraded run is explicitly NOT a pass — see ComplianceReport.status.
+    passed = not any(v.severity == "error" for v in violations) and not degraded
     return ComplianceReport(
         passed=passed,
         violations=violations,

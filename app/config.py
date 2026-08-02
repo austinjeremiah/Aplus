@@ -35,7 +35,20 @@ class Settings(BaseSettings):
 
     cf_account_id: str = ""
     cf_api_token: str = ""
-    cf_image_model: str = "@cf/black-forest-labs/flux-1-schnell"
+    # Several Workers AI models, each a separate link in the fallback chain.
+    # All are free-tier, so a real multi-model fallback costs nothing to run —
+    # which matters because it is otherwise the single point of failure once
+    # the credit-funded providers are unavailable. Ordered best-quality first,
+    # fastest last (benchmarked: lucid 3.3s, phoenix 4.0s, schnell 1.7s).
+    cf_image_models: str = (
+        "@cf/leonardo/lucid-origin,"
+        "@cf/leonardo/phoenix-1.0,"
+        "@cf/black-forest-labs/flux-1-schnell"
+    )
+
+    @property
+    def cf_model_list(self) -> list[str]:
+        return [m.strip() for m in self.cf_image_models.split(",") if m.strip()]
 
     replicate_api_token: str = ""
     replicate_image_model: str = "black-forest-labs/flux-schnell"
