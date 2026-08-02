@@ -1,0 +1,62 @@
+{
+  "header_970x600": {
+    "label": "Header Image",
+    "display": "970 × 600",
+    "target_width": 970,
+    "target_height": 600,
+    "width": 1940,
+    "height": 1200,
+    "aspect_ratio": "16:9",
+    "max_bytes": 2097152,
+    "safe_zone_pct": 20,
+    "notes": "Standard Image Header with Text module. Bottom 20% is the mobile safe zone — keep text and faces out of it."
+  },
+  "banner_970x300": {
+    "label": "Banner",
+    "display": "970 × 300",
+    "target_width": 970,
+    "target_height": 300,
+    "width": 1940,
+    "height": 600,
+    "aspect_ratio": "32:10",
+    "max_bytes": 2097152,
+    "safe_zone_pct": 20,
+    "notes": "Wide lifestyle banner. Very little vertical room — avoid stacked text."
+  },
+  "card_300x300": {
+    "label": "Feature Card",
+    "display": "300 × 300",
+    "target_width": 300,
+    "target_height": 300,
+    "width": 600,
+    "height": 600,
+    "aspect_ratio": "1:1",
+    "max_bytes": 2097152,
+    "safe_zone_pct": 15,
+    "notes": "Four-card or three-card module tile. Single focal subject reads best at this size."
+  },
+  "comparison_150x150": {
+    "label": "Comparison Chart Cell",
+    "display": "150 × 150",
+    "target_width": 150,
+    "target_height": 150,
+    "width": 300,
+    "height": 300,
+    "aspect_ratio": "1:1",
+    "max_bytes": 2097152,
+    "safe_zone_pct": 10,
+    "notes": "Product thumbnail inside a comparison chart. Must be legible when tiny — no text."
+  },
+  "grid_135x135": {
+    "label": "Image Grid Tile",
+    "display": "135 × 135",
+    "target_width": 135,
+    "target_height": 135,
+    "width": 270,
+    "height": 270,
+    "aspect_ratio": "1:1",
+    "max_bytes": 2097152,
+    "safe_zone_pct": 10,
+    "notes": "Four-image grid tile. Smallest module — icon-like subjects only."
+  }
+}

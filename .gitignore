@@ -1,0 +1,38 @@
+# --- secrets ---
+.env
+*.pem
+*.key
+
+# --- build blueprint (kept local, not published) ---
+A++.md
+
+# --- python ---
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# --- app data ---
+data/
+*.db
+*.sqlite3
+tmp/
+uploads/
+out/
+
+# --- node / frontend ---
+node_modules/
+.next/
+dist/
+build/
+.turbo/
+
+# --- os / editor ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
