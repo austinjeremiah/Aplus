@@ -62,6 +62,7 @@ class GenerationOutcome:
     attempt: int
     parent_run_id: str | None
     failures: list[AttemptError] = field(default_factory=list)
+    export_path: str | None = None
 
     @property
     def ok(self) -> bool:
@@ -109,12 +110,15 @@ def build_prompt(module_id: str, brief: str) -> str:
 def _step_params(slot: ProviderSlot, spec: dict) -> dict[str, Any]:
     """Translate the module spec into whichever params this provider takes."""
     if slot.wants_dimensions:
-        # Workers AI caps generated images at 1024px per side, so the 2x
-        # canvas is clamped here and upscaled at export instead of letting
-        # the provider reject the request outright.
+        # Workers AI caps generated images at 1024px per side. Clamping each
+        # axis independently would silently change the aspect ratio (a
+        # 1940x1200 request became a 1024x1024 square), so scale both axes by
+        # one factor and let export resample up to the module canvas.
+        w, h = spec["width"], spec["height"]
+        scale = min(1.0, 1024 / max(w, h))
         return {
-            "width": min(spec["width"], 1024),
-            "height": min(spec["height"], 1024),
+            "width": max(64, int(round(w * scale / 8)) * 8),
+            "height": max(64, int(round(h * scale / 8)) * 8),
         }
     return {"aspect_ratio": spec["aspect_ratio"]}
 

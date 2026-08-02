@@ -22,9 +22,30 @@ from pathlib import Path
 from genblaze_core import Asset, Modality, ProviderErrorCode
 from genblaze_core.mocks import MockProvider
 from genblaze_core.models.step import Step
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 
 from app.rubric.modules import get_module
+
+# PIL's built-in bitmap font is ~11px regardless of canvas size, which is
+# illegible on a 1940px render and unreadable to a vision model after
+# downscaling. Fixtures whose text can't be read would test the judge on an
+# impossible input, so scale a real TrueType face to the canvas instead.
+_FONT_CANDIDATES = (
+    "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+    "/System/Library/Fonts/Helvetica.ttc",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    "/Library/Fonts/Arial.ttf",
+)
+
+
+def _font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+    for path in _FONT_CANDIDATES:
+        if Path(path).exists():
+            try:
+                return ImageFont.truetype(path, size)
+            except OSError:
+                continue
+    return ImageFont.load_default()
 
 _OUT_DIR = Path(tempfile.gettempdir()) / "aplusplus-mock-assets"
 
@@ -61,18 +82,25 @@ def render_placeholder(
     draw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=fg)
     draw.rectangle([cx - r // 3, cy - int(r * 1.6), cx + r // 3, cy - r], fill=fg)
 
-    label = f"{spec['label']} · {spec['display']}"
-    draw.text((int(w * 0.04), int(h * 0.05)), label, fill=fg)
-    draw.text((int(w * 0.04), int(h * 0.10)), prompt[:70], fill=fg)
+    body = _font(max(14, int(h * 0.045)))
+    draw.text((int(w * 0.04), int(h * 0.05)), spec["label"], fill=fg, font=body)
+    draw.text((int(w * 0.04), int(h * 0.12)), prompt[:44], fill=fg, font=body)
 
     if violation == "pricing":
-        # Deliberate rubric violation: promotional pricing claim.
-        bw, bh = int(w * 0.30), int(h * 0.14)
-        draw.rectangle([w - bw - 20, 20, w - 20, 20 + bh], fill=(200, 30, 30))
-        draw.text((w - bw, 20 + bh // 3), "50% OFF - LOWEST PRICE!", fill=(255, 255, 255))
+        # Deliberate rubric violation: promotional pricing claim, rendered
+        # large enough that a vision model genuinely can read it.
+        badge = _font(max(20, int(h * 0.085)))
+        text = "50% OFF"
+        box = draw.textbbox((0, 0), text, font=badge)
+        tw, th = box[2] - box[0], box[3] - box[1]
+        pad = int(th * 0.45)
+        x0, y0 = w - tw - pad * 3, int(h * 0.06)
+        draw.rectangle([x0, y0, x0 + tw + pad * 2, y0 + th + pad * 2], fill=(198, 24, 30))
+        draw.text((x0 + pad, y0 + pad - box[1]), text, fill=(255, 255, 255), font=badge)
     elif violation == "safe_zone":
         # Deliberate rubric violation: text inside the bottom-20% mobile safe zone.
-        draw.text((int(w * 0.06), int(h * 0.90)), "ORDER NOW - LIMITED STOCK", fill=fg)
+        zone = _font(max(18, int(h * 0.07)))
+        draw.text((int(w * 0.06), int(h * 0.86)), "ORDER NOW", fill=fg, font=zone)
 
     out_dir = out_dir or _OUT_DIR
     out_dir.mkdir(parents=True, exist_ok=True)
