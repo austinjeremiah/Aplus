@@ -111,10 +111,19 @@ class Settings(BaseSettings):
                 else "off"
             ),
             "image_providers": ", ".join(self.enabled_image_providers) or "mock only",
+            # Groq is deliberately absent: it hosts no vision-capable model, so
+            # it cannot judge an image. Naming it here would advertise a judge
+            # that does not exist.
             "compliance_judge": (
-                f"groq:{self.groq_vision_model}"
-                if self.groq_api_key
-                else "openai:gpt-4o" if self.openai_api_key else "deterministic checks only"
+                f"google:{self.google_vision_model}"
+                if self.google_api_key
+                else "gmicloud:gpt-4o"
+                if self.gmi_api_key
+                else "cloudflare:llama-3.2-11b-vision"
+                if (self.cf_account_id and self.cf_api_token)
+                else "openai:gpt-4o"
+                if self.openai_api_key
+                else "deterministic checks only"
             ),
             "queue": "arq/redis" if self.redis_url else "in-process",
         }

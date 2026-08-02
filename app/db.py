@@ -184,8 +184,14 @@ def list_runs(
     status: str | None = None,
     limit: int = 50,
     offset: int = 0,
+    with_asset: bool = False,
 ) -> list[dict]:
     clauses, params = [], {}
+    if with_asset:
+        # Filter in SQL, not after the LIMIT. Provider failures store no asset,
+        # so post-filtering a page of 5 rows that happened to be 4 failures
+        # returned a near-empty gallery while thousands of assets existed.
+        clauses.append("asset_url IS NOT NULL AND asset_url != ''")
     if asin:
         clauses.append("asin = :asin")
         params["asin"] = asin

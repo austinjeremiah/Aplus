@@ -1,0 +1,127 @@
+"""Gallery and analytics.
+
+The ``view`` toggle is a genuine storage-layout difference, not a UI filter:
+``hierarchical`` reads the per-ASIN run tree, ``dedup`` reads the
+content-addressable tree where identical bytes collapse onto one key. Both
+describe the same B2 bucket.
+"""
+
+from __future__ import annotations
+
+from collections import defaultdict
+
+from fastapi import APIRouter, Query
+
+from app import db
+from app.routers.runs import _shape
+
+router = APIRouter(tags=["gallery"])
+
+
+@router.get("/gallery")
+def gallery(
+    asin: str | None = None,
+    module_id: str | None = None,
+    status: str | None = None,
+    view: str = Query("hierarchical", pattern="^(hierarchical|dedup)$"),
+    limit: int = Query(60, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> dict:
+    # Provider failures produce no asset, so they belong in lineage, not a grid.
+    rows = db.list_runs(
+        asin=asin,
+        module_id=module_id,
+        status=status,
+        limit=limit,
+        offset=offset,
+        with_asset=True,
+    )
+
+    if view == "dedup":
+        # Collapse by content hash — this is what the content-addressable
+        # layout does in the bucket, surfaced as the "Asset Library" view.
+        seen: dict[str, dict] = {}
+        for row in rows:
+            key = row.get("asset_sha256") or row["run_id"]
+            if key not in seen:
+                seen[key] = {**row, "duplicate_count": 1}
+            else:
+                seen[key]["duplicate_count"] += 1
+        rows = list(seen.values())
+
+    items = []
+    for row in rows:
+        shaped = _shape(row)
+        shaped["duplicate_count"] = row.get("duplicate_count", 1)
+        items.append(shaped)
+
+    return {"view": view, "count": len(items), "items": items}
+
+
+@router.get("/gallery/stats")
+def stats() -> dict:
+    """Cost and reliability rollups for the analytics page."""
+    rows = db.list_runs(limit=5000)
+
+    cost_per_asin: dict[str, float] = defaultdict(float)
+    per_provider: dict[str, dict] = defaultdict(
+        lambda: {"attempts": 0, "passed": 0, "failed": 0, "errors": 0, "cost_usd": 0.0}
+    )
+    status_counts: dict[str, int] = defaultdict(int)
+    retries_per_job: dict[str, int] = defaultdict(int)
+
+    for row in rows:
+        provider = row.get("provider") or "unknown"
+        entry = per_provider[provider]
+        entry["attempts"] += 1
+        entry["cost_usd"] += row.get("cost_usd") or 0.0
+        cost_per_asin[row["asin"]] += row.get("cost_usd") or 0.0
+        status_counts[row.get("status") or "unknown"] += 1
+        if row.get("job_id"):
+            retries_per_job[row["job_id"]] += 1
+
+        status = row.get("status")
+        if status in ("passed", "approved"):
+            entry["passed"] += 1
+        elif status in ("failed", "rejected"):
+            entry["failed"] += 1
+        elif status == "provider_failed":
+            entry["errors"] += 1
+
+    for entry in per_provider.values():
+        # Pass rate is computed over *judged* attempts only. Counting provider
+        # errors in the denominator would conflate "this model breaks Amazon's
+        # rules" with "this endpoint was down", which are different problems
+        # with different fixes.
+        judged = entry["passed"] + entry["failed"]
+        entry["pass_rate"] = round(entry["passed"] / judged, 3) if judged else None
+        entry["cost_usd"] = round(entry["cost_usd"], 4)
+
+    total_cost = round(sum(cost_per_asin.values()), 4)
+    judged_total = status_counts["passed"] + status_counts["approved"] + status_counts["failed"]
+    overall_pass = (
+        round((status_counts["passed"] + status_counts["approved"]) / judged_total, 3)
+        if judged_total
+        else None
+    )
+
+    return {
+        "total_runs": len(rows),
+        "total_asins": len(cost_per_asin),
+        "total_cost_usd": total_cost,
+        "overall_pass_rate": overall_pass,
+        "status_counts": dict(status_counts),
+        "cost_per_asin": [
+            {"asin": a, "cost_usd": round(c, 4)}
+            for a, c in sorted(cost_per_asin.items(), key=lambda kv: -kv[1])
+        ],
+        "per_provider": [
+            {"provider": p, **v}
+            for p, v in sorted(per_provider.items(), key=lambda kv: -kv[1]["attempts"])
+        ],
+        "avg_attempts_per_job": (
+            round(sum(retries_per_job.values()) / len(retries_per_job), 2)
+            if retries_per_job
+            else None
+        ),
+    }
