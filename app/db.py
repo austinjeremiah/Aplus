@@ -124,13 +124,22 @@ def get_run(run_id: str) -> dict | None:
 
 
 def get_lineage(run_id: str) -> list[dict]:
-    """Walk ``parent_run_id`` back to the root, then return oldest-first.
+    """Full attempt history for a run, oldest first.
 
-    This is the retry story: v1 rejected → v2 rejected → v3 approved.
+    Walking ``parent_run_id`` alone yields only the *surviving* spine —
+    v1 → v2 → v3. But a provider that failed produces a sibling attempt
+    hanging off the same parent, and dropping those would hide the most
+    interesting part of the story ("GMICloud 404'd, so we fell through to
+    Cloudflare"). So the spine is walked first, then every failed sibling
+    hanging off any spine node is merged back in by timestamp.
+
+    Versions increment only on attempts that actually produced an asset;
+    failed attempts carry the version they were attempting.
     """
-    chain: list[dict] = []
+    spine: list[dict] = []
     seen: set[str] = set()
     cursor: str | None = run_id
+
     with connect() as conn:
         while cursor and cursor not in seen:
             seen.add(cursor)
@@ -138,12 +147,34 @@ def get_lineage(run_id: str) -> list[dict]:
             if row is None:
                 break
             record = _row_to_dict(row)
-            chain.append(record)
+            spine.append(record)
             cursor = record.get("parent_run_id")
-    chain.reverse()
-    for i, record in enumerate(chain, start=1):
-        record["version"] = i
-    return chain
+
+        if not spine:
+            return []
+
+        spine_ids = [r["run_id"] for r in spine]
+        placeholders = ", ".join("?" * len(spine_ids))
+        siblings = conn.execute(
+            f"SELECT * FROM runs WHERE parent_run_id IN ({placeholders})"
+            f" AND run_id NOT IN ({placeholders})",
+            (*spine_ids, *spine_ids),
+        ).fetchall()
+
+    merged = spine + [_row_to_dict(r) for r in siblings]
+    merged.sort(key=lambda r: (r.get("created_at") or "", r.get("run_id") or ""))
+
+    version = 0
+    for record in merged:
+        produced_asset = record.get("status") != "provider_failed"
+        if produced_asset:
+            version += 1
+            record["version"] = version
+        else:
+            # A failure was an attempt at the version that follows it.
+            record["version"] = version + 1
+        record["succeeded"] = produced_asset
+    return merged
 
 
 def list_runs(
