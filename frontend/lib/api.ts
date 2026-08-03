@@ -23,6 +23,66 @@ export interface Violation {
   evidence: string;
 }
 
+export interface AsinModuleRow {
+  module_id: string;
+  label: string;
+  display: string;
+  generated: boolean;
+  run_id: string | null;
+  asset_url: string | null;
+  status: string;
+  provider: string | null;
+  attempts: number;
+  readiness_score: number | null;
+  readiness_grade: string | null;
+  blocking: string[];
+}
+
+export interface AsinReport {
+  asin: string;
+  modules: AsinModuleRow[];
+  summary: {
+    modules_total: number;
+    modules_generated: number;
+    modules_compliant: number;
+    modules_unresolved: number;
+    readiness_score: number | null;
+    weakest: {
+      key: string;
+      label: string;
+      score: number;
+      evidence: string | null;
+      modules: string[];
+    } | null;
+    total_attempts: number;
+    total_cost_usd: number;
+    providers: { provider: string; attempts: number }[];
+  };
+}
+
+export interface AsinListItem {
+  asin: string;
+  runs: number;
+  modules: number;
+  last_seen: string | null;
+}
+
+export interface ReadinessMetric {
+  key: string;
+  label: string;
+  score: number;
+  evidence: string;
+}
+
+/** Merchandising quality, scored from the pixels. Separate from pass/fail:
+ *  a compliant asset can still be a weak listing image. */
+export interface Readiness {
+  score: number | null;
+  grade: 'excellent' | 'good' | 'fair' | 'weak' | null;
+  metrics: ReadinessMetric[];
+  unavailable: string | null;
+}
+
 export interface Compliance {
   passed: boolean;
   status: 'passed' | 'failed' | 'needs_review';
@@ -32,6 +92,7 @@ export interface Compliance {
   degraded: boolean;
   text_seen: string;
   notes: string;
+  readiness?: Readiness;
 }
 
 export interface Run {
@@ -216,6 +277,8 @@ export const api = {
     demo_violation?: 'pricing' | 'safe_zone' | null;
   }) => post<{ job_id: string; status: string }>('/generate', body),
   stats: () => request<Stats>('/gallery/stats'),
+  asins: () => request<{ count: number; items: AsinListItem[] }>('/asins'),
+  asinReport: (asin: string) => request<AsinReport>(`/asin/${encodeURIComponent(asin)}/report`),
   reviewQueue: () => request<Run[]>('/review?limit=100'),
   review: (id: string, decision: 'approved' | 'rejected') =>
     patch<{ run_id: string; status: string }>(`/runs/${id}/review`, { decision }),

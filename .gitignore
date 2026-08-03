@@ -45,3 +45,6 @@ frontend/.env.local
 
 # typescript incremental build cache
 *.tsbuildinfo
+
+# Internal company documentation — never publish
+sg.md

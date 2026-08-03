@@ -291,6 +291,52 @@ function RunDetail({ params }: { params: Promise<{ runId: string }> }) {
               )}
             </div>
 
+            {compliance?.readiness && compliance.readiness.score != null ? (
+              <div className="app_panel" style={{ marginTop: '1.5rem' }}>
+                <div
+                  className="app_row"
+                  style={{ justifyContent: 'space-between', marginBottom: '0.9rem' }}
+                >
+                  <span className="u-text-mono u-text-style-xsmall" style={{ opacity: 0.5 }}>
+                    LISTING READINESS
+                  </span>
+                  <span
+                    className="u-text-style-h4 u-text-trim-off"
+                    style={{ color: GRADE_TONE[compliance.readiness.grade ?? 'fair'] }}
+                  >
+                    {compliance.readiness.score}
+                    <span style={{ opacity: 0.4, fontSize: '0.6em' }}>/100</span>
+                  </span>
+                </div>
+
+                <p className="u-text-style-xsmall" style={{ opacity: 0.45, marginBottom: '1.2rem' }}>
+                  Merchandising quality measured from the pixels — separate from policy. A
+                  compliant image can still be a weak listing image. Not a predicted
+                  click-through rate; there is no sales data behind this system.
+                </p>
+
+                {compliance.readiness.metrics.map((m) => (
+                  <div key={m.key} style={{ marginBottom: '0.9rem' }}>
+                    <div className="app_row" style={{ justifyContent: 'space-between', flexWrap: 'nowrap' }}>
+                      <span className="u-text-style-small">{m.label}</span>
+                      <span
+                        className="u-text-mono u-text-style-xsmall"
+                        style={{ color: scoreTone(m.score) }}
+                      >
+                        {m.score}
+                      </span>
+                    </div>
+                    <span className="app_bar" style={{ display: 'block', margin: '0.35rem 0' }}>
+                      <span style={{ width: `${m.score}%`, background: scoreTone(m.score) }} />
+                    </span>
+                    <div className="u-text-style-xsmall" style={{ opacity: 0.4 }}>
+                      {m.evidence}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
             <div className="app_panel" style={{ marginTop: '1.5rem' }}>
               <div className="u-text-mono u-text-style-xsmall" style={{ opacity: 0.5, marginBottom: '1rem' }}>
                 PROVENANCE
@@ -311,6 +357,22 @@ function RunDetail({ params }: { params: Promise<{ runId: string }> }) {
       ) : null}
     </AppShell>
   );
+}
+
+
+const GRADE_TONE: Record<string, string> = {
+  excellent: '#6dd39a',
+  good: '#6dd39a',
+  fair: '#e5b552',
+  weak: '#f0736a',
+};
+
+/** Same thresholds as ReadinessReport.grade, applied per metric so a single
+ *  weak dimension is visible against an otherwise healthy score. */
+function scoreTone(score: number): string {
+  if (score >= 70) return '#6dd39a';
+  if (score >= 45) return '#e5b552';
+  return '#f0736a';
 }
 
 export default function RunDetailPage(props: { params: Promise<{ runId: string }> }) {

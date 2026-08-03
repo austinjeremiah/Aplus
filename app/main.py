@@ -15,7 +15,7 @@ from genblaze_core.exceptions import GenblazeError, ManifestError, StorageError
 
 from app import db
 from app.config import settings
-from app.routers import gallery, generate, runs, verify
+from app.routers import asin, gallery, generate, runs, verify
 from app.rubric.modules import module_options
 from app.services.pipeline import dead_providers
 from app.services.providers import chain_summary
@@ -79,6 +79,7 @@ async def _genblaze_error(_, exc: GenblazeError):
 
 # --- routers ------------------------------------------------------------
 app.include_router(generate.router)
+app.include_router(asin.router)
 app.include_router(runs.router)
 app.include_router(gallery.router)
 app.include_router(verify.router)

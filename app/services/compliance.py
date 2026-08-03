@@ -27,6 +27,7 @@ from typing import Any
 
 from PIL import Image
 
+from app.rubric.readiness import ReadinessReport, readiness_report
 from app.rubric.aplus_rules import Violation, check_deterministic, safe_zone_box
 from app.services.vision import ask_vision, extract_json, vision_available
 
@@ -99,6 +100,11 @@ class ComplianceReport:
     degraded: bool = False
     text_seen: str = ""
     notes: str = ""
+    # Merchandising quality, scored separately from policy. Never affects
+    # pass/fail: a compliant asset that scores poorly is still compliant, and
+    # conflating "breaks an Amazon rule" with "is a weak listing image" would
+    # make the verdict unusable for the thing it exists to decide.
+    readiness: ReadinessReport = field(default_factory=ReadinessReport)
 
     @property
     def errors(self) -> list[Violation]:
@@ -136,6 +142,7 @@ class ComplianceReport:
             "degraded": self.degraded,
             "text_seen": self.text_seen,
             "notes": self.notes,
+            "readiness": self.readiness.as_dict(),
         }
 
     def summary(self) -> str:
@@ -243,6 +250,7 @@ def compliance_report(
     """
     path = Path(path)
     violations = list(check_deterministic(path, spec))
+    readiness = readiness_report(path, spec)
     checks = ["dimensions", "colour_mode", "file_size", "sharpness"]
     judge: str | None = None
     text_seen = ""
@@ -289,4 +297,5 @@ def compliance_report(
         degraded=degraded,
         text_seen=text_seen,
         notes=notes,
+        readiness=readiness,
     )

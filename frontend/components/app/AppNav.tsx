@@ -21,6 +21,7 @@ import { useAuth } from '@/components/auth/AuthProvider';
 export const LINKS = [
   { href: '/dashboard', label: 'Dashboard' },
   { href: '/generate', label: 'Generate' },
+  { href: '/asin', label: 'Listings' },
   { href: '/review', label: 'Review' },
   { href: '/gallery', label: 'Gallery' },
   { href: '/analytics', label: 'Analytics' },
