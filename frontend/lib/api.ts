@@ -130,6 +130,33 @@ export interface ModuleOption {
   notes: string;
 }
 
+export interface VerifyResult {
+  valid: boolean;
+  found: boolean;
+  source: string;
+  manifest: Record<string, unknown> | null;
+  integrity: {
+    valid: boolean;
+    hash_ok: boolean;
+    canonical_hash: string | null;
+    unverified_assets: string[];
+    invalid_metadata: string[];
+  } | null;
+  run: Run | null;
+  lineage: Run[];
+  message: string | null;
+}
+
+async function patch<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new ApiError(`${res.status} ${res.statusText}`, res.status);
+  return (await res.json()) as T;
+}
+
 async function post<T>(path: string, body: unknown): Promise<T> {
   let res: Response;
   try {
@@ -154,8 +181,33 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   return (await res.json()) as T;
 }
 
+export interface LoopResult {
+  asin: string;
+  module_id: string;
+  approved: boolean;
+  attempts: number;
+  total_cost_usd: number;
+  run_id: string | null;
+  asset_url: string | null;
+  manifest_uri: string | null;
+  compliance: Compliance | null;
+}
+
+export interface Job {
+  job_id: string;
+  status: 'queued' | 'in_progress' | 'complete' | 'failed' | 'not_found';
+  asin: string | null;
+  module_id: string | null;
+  result: LoopResult | null;
+  error: string | null;
+}
+
 export const api = {
   health: () => request<Health>('/health'),
+  job: (id: string) => request<Job>(`/jobs/${id}`),
+  run: (id: string) => request<Run>(`/runs/${id}`),
+  lineage: (id: string) => request<Run[]>(`/runs/${id}/lineage`),
+  exportUrl: (id: string) => `${API_BASE}/runs/${id}/export`,
   modules: () => request<ModuleOption[]>('/modules'),
   generate: (body: {
     asin: string;
@@ -164,8 +216,24 @@ export const api = {
     demo_violation?: 'pricing' | 'safe_zone' | null;
   }) => post<{ job_id: string; status: string }>('/generate', body),
   stats: () => request<Stats>('/gallery/stats'),
-  gallery: (limit = 8) =>
-    request<{ view: string; count: number; items: Run[] }>(`/gallery?limit=${limit}`),
+  reviewQueue: () => request<Run[]>('/review?limit=100'),
+  review: (id: string, decision: 'approved' | 'rejected') =>
+    patch<{ run_id: string; status: string }>(`/runs/${id}/review`, { decision }),
+  verify: async (payload: { file?: File; run_id?: string }) => {
+    const form = new FormData();
+    if (payload.file) form.append('file', payload.file);
+    if (payload.run_id) form.append('run_id', payload.run_id);
+    const res = await fetch(`${API_BASE}/verify`, { method: 'POST', body: form });
+    if (!res.ok) throw new ApiError(`${res.status} ${res.statusText}`, res.status);
+    return (await res.json()) as VerifyResult;
+  },
+  gallery: (opts: { limit?: number; view?: string; asin?: string; module_id?: string; status?: string } = {}) => {
+    const q = new URLSearchParams({ limit: String(opts.limit ?? 120) });
+    (['view', 'asin', 'module_id', 'status'] as const).forEach((k) => {
+      if (opts[k]) q.set(k, opts[k] as string);
+    });
+    return request<{ view: string; count: number; items: Run[] }>(`/gallery?${q}`);
+  },
 };
 
 /** Asset URLs come back API-relative (/asset?key=…) because the B2 bucket is

@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import logging
 import tempfile
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -32,6 +32,8 @@ from app.services.export import normalize_to_canvas
 from app.services.pipeline import GenerationOutcome, build_prompt, generate_module
 
 logger = logging.getLogger(__name__)
+
+
 
 
 @dataclass
@@ -171,20 +173,24 @@ def generate_compliant(
     negative_extra: str = ""
 
     for attempt_no in range(1, budget + 2):  # first attempt + retries
+        # A forced violation still generates through the real chain; only the
+        # offending element is composited onto the result. Asking the model for
+        # a "50% OFF" badge does not work — FLUX and SANA cannot render
+        # requested words, so the image comes back clean and nothing is caught.
+        chain = None
         if demo_violation and attempt_no == 1:
-            from app.services.providers import ProviderSlot
-            from app.services.mock_image import local_image_provider
+            from app.services.demo_violation import ViolationInjectingProvider
+            from app.services.providers import provider_chain
 
-            chain = (
-                ProviderSlot(
-                    key="local-mock",
-                    provider=local_image_provider(violation=demo_violation),
-                    model="local-mock-v1",
-                    est_cost_usd=0.0,
-                ),
-            )
-        else:
-            chain = None
+            live = [s for s in provider_chain() if not s.key.endswith("mock")]
+            if live:
+                base = live[0]
+                chain = (
+                    replace(
+                        base,
+                        provider=ViolationInjectingProvider(base.provider, demo_violation),
+                    ),
+                )
 
         outcome = generate_module(
             asin=asin,

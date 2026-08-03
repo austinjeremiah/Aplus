@@ -83,7 +83,7 @@ export default function DashboardPage() {
   const load = useCallback(() => {
     setError(null);
     api.stats().then(setStats).catch((e: ApiError) => setError(e.message));
-    api.gallery(8).then((g) => setRuns(g.items)).catch(() => setRuns([]));
+    api.gallery({ limit: 8 }).then((g) => setRuns(g.items)).catch(() => setRuns([]));
     api.health().then(setHealth).catch(() => setHealth(null));
   }, []);
 
