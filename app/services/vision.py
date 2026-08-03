@@ -210,6 +210,18 @@ class OpenAICompatVision(VisionBackend):
 
 def _backends() -> list[VisionBackend]:
     candidates: list[VisionBackend] = []
+    # Frontier vision model first when available — the judge is the component
+    # whose accuracy the whole rubric rests on, and a weak one produces
+    # confident, wrong verdicts.
+    if settings.agentrouter_api_key:
+        candidates.append(
+            OpenAICompatVision(
+                "agentrouter",
+                settings.agentrouter_base_url,
+                settings.agentrouter_api_key,
+                settings.agentrouter_vision_model,
+            )
+        )
     if settings.gmi_api_key:
         candidates.append(
             OpenAICompatVision(

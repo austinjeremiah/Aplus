@@ -63,6 +63,13 @@ class Settings(BaseSettings):
     groq_vision_model: str = "meta-llama/llama-4-scout-17b-16e-instruct"
     groq_base_url: str = "https://api.groq.com/openai/v1"
     openai_api_key: str = ""
+    # AgentRouter — OpenAI-compatible LLM router. Its models are text+vision
+    # only (no image output), so it cannot generate, but a frontier vision
+    # model makes by far the strongest compliance judge available here.
+    agentrouter_api_key: str = ""
+    agentrouter_base_url: str = "https://agentrouter.org/v1"
+    agentrouter_vision_model: str = "claude-opus-5"
+
     # Google AI Studio. Free tier covers multimodal *input* (vision), which is
     # what the judge needs — only image *generation* is paid there. This is the
     # only free vision judge that is not subject to a daily neuron budget.
@@ -115,7 +122,9 @@ class Settings(BaseSettings):
             # it cannot judge an image. Naming it here would advertise a judge
             # that does not exist.
             "compliance_judge": (
-                f"google:{self.google_vision_model}"
+                f"agentrouter:{self.agentrouter_vision_model}"
+                if self.agentrouter_api_key
+                else f"google:{self.google_vision_model}"
                 if self.google_api_key
                 else "gmicloud:gpt-4o"
                 if self.gmi_api_key
