@@ -505,3 +505,18 @@ select.app_input option {
   border: 1px solid var(--swatch--black-300);
   background: var(--swatch--card-bg);
 }
+
+/* --- template buttons inside the app ------------------------------------- */
+/* The template duplicates every button label as a text-shadow 1.2em below it,
+   kept out of sight by `overflow: clip` on .g_btn_text_contain and slid into
+   view on hover as a marquee. That illusion holds only while the label is a
+   single line: once it wraps, the container grows tall enough to reveal the
+   shadow copy and the label reads as doubled. App forms put buttons next to
+   flexible inputs, which is exactly where wrapping happens. */
+.app_main .g_btn_text {
+  white-space: nowrap;
+}
+
+.app_main .g_btn_main {
+  flex-shrink: 0;
+}

@@ -111,7 +111,15 @@ function GenerateInner() {
               <span className="u-text-style-xsmall" style={{ color: '#f0736a' }}>
                 An ASIN is required.
               </span>
-            ) : null}
+            ) : (
+              // The label alone assumes the reader already sells on Amazon.
+              // Saying what it is and what it does here is cheaper than making
+              // them guess at the one field that partitions all their storage.
+              <span className="u-text-style-xsmall" style={{ opacity: 0.45 }}>
+                Amazon&rsquo;s product ID &mdash; the <code>B0…</code> code in any listing URL. Every
+                asset and attempt for this product is stored under it.
+              </span>
+            )}
           </div>
 
           <div className="app_field">
@@ -157,7 +165,16 @@ function GenerateInner() {
               <span className="u-text-style-xsmall" style={{ color: '#f0736a' }}>
                 Describe the product so the model has something to work with.
               </span>
-            ) : null}
+            ) : (
+              // The placeholder disappears on the first keystroke, which is
+              // exactly when someone is deciding what to write. Keep the shape
+              // of a good brief on screen, and say what not to ask for — the
+              // rubric rejects overlaid text, so requesting it wastes a retry.
+              <span className="u-text-style-xsmall" style={{ opacity: 0.45 }}>
+                What it is, its material and colour, then the tone and surface. Leave out prices,
+                badges and brand names &mdash; those are rejected by the rubric.
+              </span>
+            )}
           </div>
 
           <button
