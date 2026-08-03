@@ -1,3 +1,5 @@
+import SignIn from '@/components/app/SignIn';
+
 export default function Hero() {
   return (
     <section data-animate="" data-theme-section="dark" data-scroll-container="" data-target-translate="100" data-overlay-container="" className="hero_home_wrap">
@@ -27,6 +29,7 @@ export default function Hero() {
               multi-provider reliability for
               Amazon A+ Content.
             </h1>
+            <SignIn />
           </div>
           <div className="hero_home_bottom">
             <svg width="100%" viewBox="0 0 336 83" fill="none" className="hero_home_svg" xmlns="http://www.w3.org/2000/svg">

@@ -1,5 +1,6 @@
 import AppNav from '@/components/app/AppNav';
 import GrainOverlay from '@/components/GrainOverlay';
+import RequireAuth from '@/components/app/RequireAuth';
 
 /**
  * Shell for every application route. The marketing landing page keeps the
@@ -13,7 +14,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <GrainOverlay />
       <AppNav />
       <main className="page_main app_main">
-        <div className="app_container">{children}</div>
+        <div className="app_container">
+          <RequireAuth>{children}</RequireAuth>
+        </div>
       </main>
     </div>
   );

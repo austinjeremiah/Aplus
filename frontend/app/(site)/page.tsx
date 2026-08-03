@@ -1,4 +1,3 @@
-import AppNav from '@/components/app/AppNav';
 import Hero from '@/components/sections/Hero';
 
 /**
@@ -10,7 +9,6 @@ export default function Home() {
   return (
     <div data-barba="container" data-barba-namespace="home" className="page_wrap">
       <link rel="stylesheet" href="/styles/app.css" precedence="high" />
-      <AppNav />
       <main className="page_main">
         <Hero />
       </main>

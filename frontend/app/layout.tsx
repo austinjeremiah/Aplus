@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { AuthProvider } from '@/components/app/auth';
 
 const description =
   'A++ is a compliance and governance system for Amazon A+ Content image generation. A real rubric against Amazon rules, multi-provider fallback with full retry lineage, dual Backblaze B2 storage, and a public provenance verify page. Built on Genblaze + Backblaze B2.';
@@ -39,7 +40,7 @@ export default function RootLayout({
         <link rel="stylesheet" href="/styles/inline.css" precedence="high" />
 
 
-        {children}
+        <AuthProvider>{children}</AuthProvider>
 
       </body>
     </html>
