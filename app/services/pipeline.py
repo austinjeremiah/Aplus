@@ -19,16 +19,19 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass, field
+from pathlib import PurePosixPath
 from typing import Any
+from urllib.parse import urlparse
 
 from genblaze_core import Modality, Pipeline
 from genblaze_core.exceptions import GenblazeError
 from genblaze_core.pipeline.result import PipelineResult
 
 from app import db
+from app.config import settings
 from app.rubric.modules import get_module
 from app.services.providers import ProviderSlot, provider_chain
-from app.services.storage import hierarchical_sink
+from app.services.storage import content_addressable_sink, hierarchical_sink
 
 logger = logging.getLogger(__name__)
 
@@ -185,6 +188,59 @@ def _extract_asset(result: PipelineResult) -> tuple[str | None, str | None, str 
     return None, None, None
 
 
+def _mirror_content_addressable(result: PipelineResult, asin: str) -> None:
+    """Also store the run under the content-addressable layout.
+
+    The two layouts answer different questions. ``runs/{asin}/{date}/{run_id}/``
+    answers "what happened for this product", and is the tree an audit walks.
+    ``assets/{ab}/{cd}/{sha256}`` answers "have we produced these exact bytes
+    before" — identical output from two ASINs collapses onto one key, so the
+    library is deduplicated by construction rather than by a nightly job.
+
+    The asset is mirrored with a server-side copy rather than
+    ``sink.put_assets``. By this point the hierarchical sink has already
+    rewritten each asset URL to its B2 object URL, and ``put_assets`` re-fetches
+    from that URL — which 401s against a private bucket, and would pull the
+    bytes down and back up again even if it did not.
+
+    Failures here are logged and swallowed: the hierarchical write is the
+    system of record, and a dedup mirror that is briefly behind is much better
+    than a completed, already-paid-for generation being thrown away.
+    """
+    from app.services.storage import get_backend
+
+    run_id = result.run.run_id
+
+    # The manifest goes through the sink so it picks up the same GOVERNANCE
+    # retention lock the hierarchical copy gets. Separate try block: a failure
+    # copying bytes must not cost us the provenance record.
+    try:
+        content_addressable_sink().write_run(result.run, result.manifest)
+    except Exception:  # noqa: BLE001 - mirroring must never fail a good run
+        logger.exception("content-addressable manifest mirror failed for run %s", run_id)
+
+    try:
+        backend = get_backend()
+        client, bucket = backend._client, settings.b2_bucket
+        for step in result.run.steps:
+            for asset in step.assets:
+                if not asset.sha256:
+                    continue
+                src = backend.key_from_url(asset.url)
+                if not src:
+                    continue
+                ext = PurePosixPath(urlparse(asset.url).path).suffix or ".png"
+                sha = asset.sha256
+                dest = f"{settings.storage_prefix}/assets/{sha[:2]}/{sha[2:4]}/{sha}{ext}"
+                # Content-addressed: identical bytes always produce this same
+                # key, so re-copying is idempotent and dedup is automatic.
+                client.copy_object(
+                    Bucket=bucket, Key=dest, CopySource={"Bucket": bucket, "Key": src}
+                )
+    except Exception:  # noqa: BLE001 - mirroring must never fail a good run
+        logger.exception("content-addressable asset mirror failed for run %s", run_id)
+
+
 def _run_cost(result: PipelineResult, slot: ProviderSlot) -> float:
     """Prefer provider-reported spend; fall back to the chain's estimate."""
     reported = sum(float(s.cost_usd or 0) for s in result.run.steps)
@@ -277,6 +333,8 @@ def generate_module(
                 error=str(exc)[:1000],
             )
             continue
+
+        _mirror_content_addressable(result, asin)
 
         url, sha256, key = _extract_asset(result)
         outcome = GenerationOutcome(
