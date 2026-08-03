@@ -1,0 +1,240 @@
+/* A+ Foundry — application layout.
+ *
+ * Structure only: grids, tables, panels, badges. The template is a marketing
+ * site and ships no table, card, input or badge styles, so those have to come
+ * from somewhere. Everything visible — size, weight, family, colour — still
+ * comes from the template: u-text-style-* for type, g_btn_* for buttons, and
+ * its own swatch/theme custom properties for colour.
+ */
+
+/* --- shell -------------------------------------------------------------- */
+.app_nav {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: color-mix(in srgb, var(--swatch--black-400) 90%, transparent);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--swatch--black-300);
+}
+
+.app_nav_inner,
+.app_container {
+  width: 100%;
+  max-width: 84rem;
+  margin: 0 auto;
+  padding: 0 2rem;
+}
+
+.app_nav_inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2rem;
+  padding-top: 1.1rem;
+  padding-bottom: 1.1rem;
+}
+
+.app_nav_logo {
+  width: 7rem;
+  flex: none;
+  color: var(--swatch--beige-100);
+}
+
+.app_nav_links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1.6rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.app_nav_link {
+  color: inherit;
+  text-decoration: none;
+  opacity: 0.45;
+  transition: opacity 0.2s ease;
+}
+
+.app_nav_link:hover,
+.app_nav_link.is-active {
+  opacity: 1;
+}
+
+.app_nav_right {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+}
+
+.app_avatar {
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 50%;
+  display: block;
+}
+
+.app_main {
+  min-height: 100vh;
+  padding: 3rem 0 6rem;
+}
+
+/* --- page head ---------------------------------------------------------- */
+.app_head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding-bottom: 1.75rem;
+  margin-bottom: 2.5rem;
+  border-bottom: 1px solid var(--swatch--black-300);
+}
+
+.app_section {
+  margin-top: 3rem;
+}
+
+.app_row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+/* --- surfaces ----------------------------------------------------------- */
+.app_panel {
+  border: 1px solid var(--swatch--black-300);
+  border-radius: 0.3rem;
+  background: var(--swatch--card-bg);
+  padding: 1.5rem;
+}
+
+.app_panel.is-flush {
+  padding: 0;
+  overflow: hidden;
+}
+
+/* --- grids -------------------------------------------------------------- */
+.app_grid_stats {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+}
+
+.app_grid_split {
+  display: grid;
+  gap: 2rem;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  align-items: start;
+}
+
+@media (max-width: 64rem) {
+  .app_grid_split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* --- stat tile ---------------------------------------------------------- */
+.app_stat {
+  border: 1px solid var(--swatch--black-300);
+  border-radius: 0.3rem;
+  padding: 1.35rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.app_stat_value {
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- table -------------------------------------------------------------- */
+.app_table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.app_table th,
+.app_table td {
+  text-align: left;
+  padding: 0.8rem 1.1rem;
+  border-bottom: 1px solid var(--swatch--black-300);
+  vertical-align: middle;
+}
+
+.app_table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.app_table tbody tr:hover td {
+  background: color-mix(in srgb, var(--swatch--black-300) 35%, transparent);
+}
+
+.app_thumb {
+  width: 4rem;
+  height: 2.7rem;
+  object-fit: cover;
+  border-radius: 0.2rem;
+  border: 1px solid var(--swatch--black-300);
+  display: block;
+  background: var(--swatch--black-300);
+}
+
+/* --- badge -------------------------------------------------------------- */
+.app_badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.26rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  white-space: nowrap;
+}
+
+.app_badge_dot {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
+}
+
+/* The one place the app introduces hue: a compliance verdict has to read at a
+   glance. Four semantic values, no more. */
+.app_badge.is-pass { color: #6dd39a; }
+.app_badge.is-fail { color: #f0736a; }
+.app_badge.is-warn { color: #e5b552; }
+.app_badge.is-idle { color: var(--swatch--black-50); }
+
+/* --- misc --------------------------------------------------------------- */
+.app_empty {
+  padding: 4rem 2rem;
+  text-align: center;
+  border: 1px dashed var(--swatch--black-300);
+  border-radius: 0.3rem;
+}
+
+.app_error {
+  border: 1px solid #f0736a;
+  color: #f0736a;
+  border-radius: 0.3rem;
+  padding: 0.9rem 1.1rem;
+  margin-bottom: 1.5rem;
+}
+
+.app_skeleton {
+  background: var(--swatch--black-300);
+  border-radius: 0.3rem;
+  animation: app_pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes app_pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 0.7; }
+}
+
+.app_break {
+  word-break: break-all;
+}

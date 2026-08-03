@@ -42,3 +42,6 @@ frontend/.next/
 frontend/out/
 frontend/.env.local
 frontend/.env.local
+
+# typescript incremental build cache
+*.tsbuildinfo

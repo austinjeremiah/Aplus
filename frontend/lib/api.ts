@@ -1,0 +1,149 @@
+/**
+ * Typed client for the A+ Foundry backend.
+ *
+ * Every call goes through `request()` so the base URL, error shaping and
+ * "backend isn't running" get handled once instead of per page.
+ */
+
+export const API_BASE =
+  process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, '') ?? 'http://localhost:8000';
+
+export type RunStatus =
+  | 'generated'
+  | 'passed'
+  | 'failed'
+  | 'needs_review'
+  | 'approved'
+  | 'rejected'
+  | 'provider_failed';
+
+export interface Violation {
+  rule: string;
+  severity: 'error' | 'warning';
+  evidence: string;
+}
+
+export interface Compliance {
+  passed: boolean;
+  status: 'passed' | 'failed' | 'needs_review';
+  violations: Violation[];
+  checks_run: string[];
+  judge: string | null;
+  degraded: boolean;
+  text_seen: string;
+  notes: string;
+}
+
+export interface Run {
+  run_id: string;
+  parent_run_id: string | null;
+  asin: string;
+  module_id: string;
+  attempt: number;
+  version?: number;
+  succeeded: boolean;
+  provider: string | null;
+  model: string | null;
+  status: RunStatus;
+  review_decision: string | null;
+  asset_url: string | null;
+  asset_sha256: string | null;
+  canonical_hash: string | null;
+  cost_usd: number;
+  duration_sec: number | null;
+  error: string | null;
+  compliance: Compliance | null;
+  violations: Violation[];
+  created_at: string | null;
+}
+
+export interface Stats {
+  total_runs: number;
+  total_asins: number;
+  total_cost_usd: number;
+  overall_pass_rate: number | null;
+  status_counts: Record<string, number>;
+  cost_per_asin: { asin: string; cost_usd: number }[];
+  per_provider: {
+    provider: string;
+    attempts: number;
+    passed: number;
+    failed: number;
+    errors: number;
+    cost_usd: number;
+    pass_rate: number | null;
+  }[];
+  avg_attempts_per_job: number | null;
+}
+
+export interface Health {
+  status: string;
+  config: Record<string, string>;
+  providers: {
+    position: number;
+    provider: string;
+    model: string;
+    est_cost_usd: number;
+    role: string;
+    status: string;
+  }[];
+  disabled_providers: Record<string, string>;
+  vision_judges: { backend: string; model: string; status: string }[];
+  queue_depth: number;
+}
+
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+  }
+}
+
+async function request<T>(path: string): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, { cache: 'no-store' });
+  } catch {
+    throw new ApiError(`Can't reach the API at ${API_BASE} — is the backend running?`, 0);
+  }
+  if (!res.ok) {
+    let detail = `${res.status} ${res.statusText}`;
+    try {
+      const body = await res.json();
+      if (body?.detail) detail = typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail);
+    } catch {
+      /* keep the status line */
+    }
+    throw new ApiError(detail, res.status);
+  }
+  return (await res.json()) as T;
+}
+
+export const api = {
+  health: () => request<Health>('/health'),
+  stats: () => request<Stats>('/gallery/stats'),
+  gallery: (limit = 8) =>
+    request<{ view: string; count: number; items: Run[] }>(`/gallery?limit=${limit}`),
+};
+
+/** Asset URLs come back API-relative (/asset?key=…) because the B2 bucket is
+ *  private and proxied; resolve them against the API host. */
+export function assetSrc(url: string | null | undefined): string | undefined {
+  if (!url) return undefined;
+  return url.startsWith('/') ? `${API_BASE}${url}` : url;
+}
+
+export const MODULE_LABELS: Record<string, string> = {
+  header_970x600: 'Header 970×600',
+  banner_970x300: 'Banner 970×300',
+  card_300x300: 'Card 300×300',
+  comparison_150x150: 'Comparison 150×150',
+  grid_135x135: 'Grid 135×135',
+};
+
+export function money(n: number | null | undefined): string {
+  if (n == null) return '—';
+  return n === 0 ? '$0.00' : `$${n.toFixed(n < 0.01 ? 4 : 2)}`;
+}
