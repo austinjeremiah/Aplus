@@ -17,8 +17,14 @@ __pycache__/
 .mypy_cache/
 
 # --- app data ---
-data/
+# Ignore the directory's contents rather than the directory itself — git
+# cannot un-ignore a file inside an ignored directory, and the run database
+# needs to ship: a deployed instance with an empty one shows judges blank
+# galleries and blank analytics.
+data/*
 *.db
+# Exception, last so it wins: ship the seeded run history.
+!data/aplusplus.db
 *.sqlite3
 tmp/
 uploads/

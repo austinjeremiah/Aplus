@@ -1,18 +1,27 @@
-genblaze-core
-genblaze-s3
-genblaze-cli
-genblaze-gmicloud
-genblaze-openai
-genblaze-replicate
-genblaze-google
-fastapi
-uvicorn[standard]
-python-multipart
-python-dotenv
-pydantic-settings
-pillow
-pyarrow
-httpx
-arq
-redis
-huggingface_hub
+# Pinned to what the project was built and verified against. A fresh install
+# on a deploy host resolving to newer majors is the classic way a working
+# build breaks at the worst moment.
+genblaze-core==0.3.8
+genblaze-s3==0.3.6
+genblaze-cli==0.3.6
+genblaze-gmicloud==0.3.5
+genblaze-openai==0.3.4
+genblaze-replicate==0.3.4
+genblaze-google==0.3.4
+
+# Image providers. huggingface_hub brokers FLUX.1-schnell across four vendors.
+huggingface_hub==1.26.0
+
+fastapi==0.141.1
+uvicorn[standard]==0.52.1
+python-multipart==0.0.32
+python-dotenv==1.2.2
+pydantic-settings==2.14.2
+pillow==11.3.0
+pyarrow==25.0.0
+httpx==0.28.1
+boto3==1.43.62
+
+# Optional queue. The app runs in-process when REDIS_URL is unset.
+arq==0.28.0
+redis==5.3.1

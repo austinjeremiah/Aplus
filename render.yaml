@@ -1,0 +1,64 @@
+# Render blueprint for the A+ Foundry API.
+#
+# Only the backend is deployed here; the Next.js frontend goes to Vercel with
+# NEXT_PUBLIC_API_URL pointed at this service.
+#
+# Secrets are declared with `sync: false`, which means Render prompts for them
+# on first deploy and never stores them in the repo. Every one of them is
+# optional in app/config.py — the service starts without them and reports what
+# is missing at /health — but with none set the provider chain degrades to the
+# local renderer, which is not what you want a judge to open.
+services:
+  - type: web
+    name: aplus-foundry-api
+    runtime: python
+    plan: free
+    region: oregon
+    buildCommand: pip install -r requirements.txt
+    # $PORT is assigned by Render; binding to 0.0.0.0 is required or the health
+    # check never passes.
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.15"
+
+      # --- Backblaze B2: storage, manifests, Object Lock ---
+      - key: B2_KEY_ID
+        sync: false
+      - key: B2_APP_KEY
+        sync: false
+      - key: B2_BUCKET
+        sync: false
+      - key: B2_REGION
+        sync: false
+      - key: MANIFEST_RETENTION_DAYS
+        value: "7"
+      - key: STORAGE_PREFIX
+        value: aplusplus
+
+      # --- Image generation: four vendors brokered through one HF token ---
+      - key: HF_API_KEY
+        sync: false
+      - key: HF_PROVIDERS
+        value: together,fal-ai
+      - key: HF_IMAGE_MODEL
+        value: black-forest-labs/FLUX.1-schnell
+
+      # --- Compliance judge ---
+      - key: AGENTROUTER_API_KEY
+        sync: false
+      - key: AGENTROUTER_VISION_MODEL
+        value: gpt-5.6-sol
+      - key: GROQ_API_KEY
+        sync: false
+
+      # Providers with unfunded accounts or exhausted free tiers. Left in the
+      # codebase but out of the chain: every attempt they serve is a guaranteed
+      # failure recorded as reliability data, which misreports a billing
+      # problem as an outage.
+      - key: DISABLED_PROVIDERS
+        value: gmicloud,cloudflare,cf,replicate
+
+      - key: MAX_COMPLIANCE_RETRIES
+        value: "2"
