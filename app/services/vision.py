@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 
 # Vision models degrade little below ~900px for text detection but cost far
 # fewer tokens, so inputs are downscaled before upload.
-_MAX_EDGE = 896
+_MAX_EDGE = 768
 
 
 @dataclass

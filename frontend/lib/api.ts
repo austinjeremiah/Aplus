@@ -121,8 +121,48 @@ async function request<T>(path: string): Promise<T> {
   return (await res.json()) as T;
 }
 
+export interface ModuleOption {
+  id: string;
+  label: string;
+  display: string;
+  aspect_ratio: string;
+  canvas: string;
+  notes: string;
+}
+
+async function post<T>(path: string, body: unknown): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    throw new ApiError(`Can't reach the API at ${API_BASE} — is the backend running?`, 0);
+  }
+  if (!res.ok) {
+    let detail = `${res.status} ${res.statusText}`;
+    try {
+      const b = await res.json();
+      if (b?.detail) detail = typeof b.detail === 'string' ? b.detail : JSON.stringify(b.detail);
+    } catch {
+      /* keep the status line */
+    }
+    throw new ApiError(detail, res.status);
+  }
+  return (await res.json()) as T;
+}
+
 export const api = {
   health: () => request<Health>('/health'),
+  modules: () => request<ModuleOption[]>('/modules'),
+  generate: (body: {
+    asin: string;
+    module_id: string;
+    brief: string;
+    demo_violation?: 'pricing' | 'safe_zone' | null;
+  }) => post<{ job_id: string; status: string }>('/generate', body),
   stats: () => request<Stats>('/gallery/stats'),
   gallery: (limit = 8) =>
     request<{ view: string; count: number; items: Run[] }>(`/gallery?limit=${limit}`),

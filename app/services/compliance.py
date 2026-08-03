@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import logging
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -69,13 +70,22 @@ _GENERIC_TERMS = {
     "product image", "water", "none", "n/a", "",
 }
 
-SAFE_ZONE_PROMPT = """This image is a crop of the BOTTOM STRIP of a product image.
+SAFE_ZONE_PROMPT = """This image is a crop of the BOTTOM STRIP of a product photo.
 
-On mobile, Amazon overlays this strip with UI, so any text or human face here
-gets obscured.
+Amazon overlays this strip with UI on mobile, so readable WORDS or a human
+FACE here would be obscured.
+
+Only report text if you can actually READ WORDS — letters forming words. Do
+NOT report:
+- product shapes, edges, bases, shadows or reflections
+- surface texture, marble veining, gradients
+- indistinct marks you cannot resolve into letters
+
+If you cannot quote the words, there is no text.
 
 Reply with JSON and nothing else:
-{"has_text": true|false, "has_face": true|false, "detail": "<what you see>"}"""
+{"words_read": "<the exact words, verbatim, or empty string>",
+ "has_face": true|false}"""
 
 _VALID_RULES = {"pricing", "superlative", "competitor", "contact_info", "warranty"}
 
@@ -203,15 +213,18 @@ def _safe_zone_violations(path: Path, spec: dict) -> tuple[list[Violation], bool
     parsed = extract_json(reply.text) or {}
     pct = spec.get("safe_zone_pct", 20)
     violations: list[Violation] = []
-    detail = str(parsed.get("detail") or reply.text)[:200]
 
-    if parsed.get("has_text") is True:
+    # A flag is only honoured when the judge can quote the words it read.
+    # Without that requirement it answered "true" for the base of a bottle and
+    # for marble veining, which rejected every compliant image produced.
+    words = str(parsed.get("words_read") or "").strip()
+    if words and len(words) >= 2 and any(ch.isalnum() for ch in words):
         violations.append(
-            Violation("safe_zone_text", "error", f"text in the bottom {pct}%: {detail}")
+            Violation("safe_zone_text", "error", f'"{words[:80]}" in the bottom {pct}%')
         )
     if parsed.get("has_face") is True:
         violations.append(
-            Violation("safe_zone_face", "warning", f"face in the bottom {pct}%: {detail}")
+            Violation("safe_zone_face", "warning", f"a face appears in the bottom {pct}%")
         )
     return violations, True
 
@@ -243,7 +256,15 @@ def compliance_report(
         notes = "no vision backend configured — content and safe-zone rules unchecked"
         degraded = True
     else:
-        content, text_seen, backend = _content_violations(path)
+        # The full-frame audit and the safe-zone crop are independent calls to
+        # the same judge. Run them together — sequentially they double the
+        # wall-clock cost of every attempt, and the retry loop multiplies that.
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            content_future = pool.submit(_content_violations, path)
+            zone_future = pool.submit(_safe_zone_violations, path, spec)
+            content, text_seen, backend = content_future.result()
+            zone, zone_ran = zone_future.result()
+
         if backend is None:
             degraded = True
             notes = "every vision backend failed; deterministic checks only"
@@ -252,8 +273,7 @@ def compliance_report(
             violations.extend(content)
             checks += ["pricing", "superlative", "competitor", "contact_info", "warranty"]
 
-            zone, ran = _safe_zone_violations(path, spec)
-            if ran:
+            if zone_ran:
                 violations.extend(zone)
                 checks.append("mobile_safe_zone")
             else:

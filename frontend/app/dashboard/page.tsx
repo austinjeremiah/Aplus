@@ -91,7 +91,6 @@ export default function DashboardPage() {
 
   return (
     <AppShell>
-      <link rel="stylesheet" href="/styles/app.css" precedence="high" />
       <header className="app_head">
         <div>
           <div className="u-text-mono u-text-style-xsmall" style={{ opacity: 0.5 }}>

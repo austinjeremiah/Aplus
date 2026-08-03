@@ -108,7 +108,7 @@
   border: 1px solid var(--swatch--black-300);
   border-radius: 0.3rem;
   background: var(--swatch--card-bg);
-  padding: 1.5rem;
+  padding: 1.9rem;
 }
 
 .app_panel.is-flush {
@@ -237,4 +237,83 @@
 
 .app_break {
   word-break: break-all;
+}
+
+/* --- form --------------------------------------------------------------- */
+.app_field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  margin-bottom: 2.2rem;
+}
+
+/* The template's text styles carry negative trim margins, which pull a label
+   into the control above it. Neutralise that on form labels. */
+.app_field > label {
+  margin: 0;
+  opacity: 0.55;
+  letter-spacing: 0.08em;
+}
+
+.app_field > span {
+  margin-top: 0.15rem;
+  line-height: 1.5;
+}
+
+.app_input {
+  width: 100%;
+  display: block;
+  padding: 0.95rem 1.1rem;
+  background: transparent;
+  border: 1px solid var(--swatch--black-300);
+  border-radius: 0.3rem;
+  color: inherit;
+  font: inherit;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+.app_input:focus {
+  border-color: var(--swatch--black-50);
+}
+
+.app_textarea {
+  min-height: 9rem;
+  resize: vertical;
+}
+
+select.app_input option {
+  background: var(--swatch--card-bg);
+  color: var(--swatch--beige-100);
+}
+
+/* --- ordered steps ------------------------------------------------------ */
+.app_steps {
+  margin: 1.5rem 0 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+}
+
+.app_steps li {
+  counter-increment: step;
+  position: relative;
+  padding-left: 2.4rem;
+  padding-bottom: 1.5rem;
+  opacity: 0.72;
+  line-height: 1.55;
+}
+
+.app_steps li::before {
+  content: counter(step, decimal-leading-zero);
+  position: absolute;
+  left: 0;
+  top: 0.15rem;
+  font-family: var(--_typography---font--tertiary-family, monospace);
+  font-size: 0.72rem;
+  opacity: 0.5;
+}
+
+.app_steps li:last-child {
+  padding-bottom: 0;
 }

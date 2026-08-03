@@ -8,6 +8,8 @@
  * routes don't run. Type and buttons still come from the template.
  */
 
+import '@/app/app.css';
+
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect } from 'react';

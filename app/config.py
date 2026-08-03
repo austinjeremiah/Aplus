@@ -83,7 +83,11 @@ class Settings(BaseSettings):
     # model makes by far the strongest compliance judge available here.
     agentrouter_api_key: str = ""
     agentrouter_base_url: str = "https://agentrouter.org/v1"
-    agentrouter_vision_model: str = "claude-opus-5"
+    # gpt-5.6-sol over claude-opus-5: both read violation text correctly, but
+    # measured 3.7s vs 7.1s solo, and Opus times out entirely when the two
+    # vision calls per attempt run concurrently. With up to three attempts per
+    # job, judge latency dominates the whole pipeline.
+    agentrouter_vision_model: str = "gpt-5.6-sol"
 
     # Google AI Studio. Free tier covers multimodal *input* (vision), which is
     # what the judge needs — only image *generation* is paid there. This is the

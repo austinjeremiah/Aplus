@@ -24,7 +24,7 @@ MAX_BYTES = 2 * 1024 * 1024
 # size. Set low deliberately: clean studio renders on plain backgrounds have
 # legitimately low edge variance, and a noisy warning on every compliant image
 # trains the reviewer to ignore the panel. Advisory, never a hard rejection.
-SHARPNESS_FLOOR = 6.0
+SHARPNESS_FLOOR = 2.0
 
 
 @dataclass
