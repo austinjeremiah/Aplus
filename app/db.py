@@ -185,8 +185,16 @@ def list_runs(
     limit: int = 50,
     offset: int = 0,
     with_asset: bool = False,
+    exclude_providers: tuple[str, ...] = (),
 ) -> list[dict]:
     clauses, params = [], {}
+    if exclude_providers:
+        # The local renderer is a degradation path, not a product. Its output
+        # is a Pillow drawing, so it must never appear alongside real model
+        # output in a gallery — but the rows stay for lineage and debugging.
+        marks = ", ".join(f":ex{i}" for i in range(len(exclude_providers)))
+        clauses.append(f"(provider IS NULL OR provider NOT IN ({marks}))")
+        params.update({f"ex{i}": v for i, v in enumerate(exclude_providers)})
     if with_asset:
         # Filter in SQL, not after the LIMIT. Provider failures store no asset,
         # so post-filtering a page of 5 rows that happened to be 4 failures

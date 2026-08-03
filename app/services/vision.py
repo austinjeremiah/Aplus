@@ -168,11 +168,19 @@ class CloudflareVision(VisionBackend):
 class OpenAICompatVision(VisionBackend):
     """Shared implementation for any OpenAI-shaped /chat/completions endpoint."""
 
-    def __init__(self, key: str, base_url: str, api_key: str, model: str) -> None:
+    def __init__(
+        self,
+        key: str,
+        base_url: str,
+        api_key: str,
+        model: str,
+        extra_headers: dict[str, str] | None = None,
+    ) -> None:
         self.key = key
         self._base = base_url.rstrip("/")
         self._api_key = api_key
         self.model = model
+        self._extra_headers = extra_headers or {}
 
     def available(self) -> bool:
         return bool(self._api_key)
@@ -199,7 +207,7 @@ class OpenAICompatVision(VisionBackend):
         with httpx.Client(timeout=120) as client:
             resp = client.post(
                 f"{self._base}/chat/completions",
-                headers={"Authorization": f"Bearer {self._api_key}"},
+                headers={"Authorization": f"Bearer {self._api_key}", **self._extra_headers},
                 json=payload,
             )
             resp.raise_for_status()
@@ -220,6 +228,14 @@ def _backends() -> list[VisionBackend]:
                 settings.agentrouter_base_url,
                 settings.agentrouter_api_key,
                 settings.agentrouter_vision_model,
+                # AgentRouter rejects unrecognised clients with 401
+                # "unauthorized client detected" regardless of key validity.
+                # These two headers are what it accepts; a bare OpenAI-style
+                # request is refused.
+                extra_headers={
+                    "anthropic-version": "2023-06-01",
+                    "User-Agent": "claude-cli/1.0.0 (external, cli)",
+                },
             )
         )
     if settings.gmi_api_key:

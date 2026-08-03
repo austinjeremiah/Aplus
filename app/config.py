@@ -53,7 +53,22 @@ class Settings(BaseSettings):
     # Keyless free provider — on by default so the chain always has a link
     # that cannot be disabled by billing or a daily cap.
     enable_pollinations: bool = True
-    pollinations_model: str = "flux"
+    # Each model is its own chain link, so fallback depth is real without
+    # depending on an account that can run out of credit.
+    pollinations_models: str = "flux,sana"
+
+    @property
+    def pollinations_model_list(self) -> list[str]:
+        return [m.strip() for m in self.pollinations_models.split(",") if m.strip()]
+
+    # Providers to leave out of the chain entirely. A provider whose account is
+    # unfunded fails on every attempt, and those failures are recorded as
+    # reliability data — which misrepresents a billing problem as an outage.
+    disabled_providers: str = ""
+
+    @property
+    def disabled_provider_list(self) -> list[str]:
+        return [d.strip() for d in self.disabled_providers.split(",") if d.strip()]
 
     replicate_api_token: str = ""
     replicate_image_model: str = "black-forest-labs/flux-schnell"
@@ -139,6 +154,7 @@ class Settings(BaseSettings):
 
     @property
     def enabled_image_providers(self) -> list[str]:
+        disabled = set(self.disabled_provider_list)
         enabled = []
         if self.gmi_api_key:
             enabled.append("gmicloud")
@@ -150,7 +166,9 @@ class Settings(BaseSettings):
             enabled.append("replicate")
         if self.openai_api_key:
             enabled.append("openai")
-        return enabled
+        # Honour the disable list here too — otherwise /health advertises
+        # providers that were already dropped from the chain.
+        return [e for e in enabled if e not in disabled]
 
 
 def _abs(value: str) -> Path:

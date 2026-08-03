@@ -98,7 +98,7 @@ def _cloudflare() -> list[ProviderSlot]:
     return slots
 
 
-def _pollinations() -> ProviderSlot | None:
+def _pollinations() -> list[ProviderSlot]:
     """Keyless free tier — the link that cannot run dry.
 
     Enabled by default precisely because it needs no credentials: it is the
@@ -107,16 +107,20 @@ def _pollinations() -> ProviderSlot | None:
     development.
     """
     if not settings.enable_pollinations:
-        return None
+        return []
     from app.services.pollinations_provider import PollinationsImageProvider
 
-    return ProviderSlot(
-        key="pollinations",
-        provider=PollinationsImageProvider(),
-        model=settings.pollinations_model,
-        est_cost_usd=0.0,
-        wants_dimensions=True,
-    )
+    provider = PollinationsImageProvider()
+    return [
+        ProviderSlot(
+            key=f"pollinations-{m}",
+            provider=provider,
+            model=m,
+            est_cost_usd=0.0,
+            wants_dimensions=True,
+        )
+        for m in settings.pollinations_model_list
+    ]
 
 
 def _replicate() -> ProviderSlot | None:
@@ -185,6 +189,15 @@ def provider_chain() -> tuple[ProviderSlot, ...]:
         if built is None:
             continue
         chain.extend(built if isinstance(built, list) else [built])
+
+    # Drop explicitly disabled providers before anything is attempted.
+    disabled = set(settings.disabled_provider_list)
+    if disabled:
+        chain = [
+            s
+            for s in chain
+            if s.key not in disabled and s.key.split("-")[0] not in disabled
+        ]
 
     if not chain:
         logger.warning(

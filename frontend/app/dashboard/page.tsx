@@ -208,59 +208,63 @@ export default function DashboardPage() {
           )}
         </section>
 
-        {/* --- provider chain --- */}
+        {/* --- compliance breakdown --- */}
         <aside>
           <h2 className="u-text-style-h4 u-text-trim-off" style={{ marginBottom: '1.2rem' }}>
-            Provider chain
+            Compliance
           </h2>
           <div className="app_panel">
-            {health ? (
+            {stats ? (
               <>
-                <p className="u-text-style-xsmall" style={{ opacity: 0.45, marginBottom: '1rem' }}>
-                  Tried in order until one succeeds. Providers that fail for reasons retrying
-                  can&rsquo;t fix are skipped for the rest of the process.
-                </p>
-                {health.providers.map((p) => {
-                  const down = p.status !== 'ready';
-                  return (
-                    <div
-                      key={`${p.provider}-${p.position}`}
-                      className="app_row"
-                      style={{ justifyContent: 'space-between', padding: '0.5rem 0', opacity: down ? 0.4 : 1 }}
-                    >
-                      <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: "0.3rem" }}>
-                        <div className="u-text-style-small u-text-trim-off">
-                          {p.position + 1}. {p.provider}
-                        </div>
-                        <div className="u-text-mono u-text-style-xsmall u-text-trim-off app_break" style={{ opacity: 0.45 }}>
-                          {p.model}
-                        </div>
+                {(() => {
+                  const c = stats.status_counts ?? {};
+                  const passed = (c.passed ?? 0) + (c.approved ?? 0);
+                  const rejected = (c.failed ?? 0) + (c.rejected ?? 0);
+                  const review = c.needs_review ?? 0;
+                  const total = passed + rejected + review || 1;
+                  const bars = [
+                    { label: 'Compliant', n: passed, hue: '#6dd39a' },
+                    { label: 'Rejected by rubric', n: rejected, hue: '#f0736a' },
+                    { label: 'Needs human review', n: review, hue: '#e5b552' },
+                  ];
+                  return bars.map((b) => (
+                    <div key={b.label} style={{ marginBottom: '1.1rem' }}>
+                      <div className="app_row" style={{ justifyContent: 'space-between', marginBottom: '0.45rem' }}>
+                        <span className="u-text-style-small u-text-trim-off">{b.label}</span>
+                        <span className="u-text-mono u-text-style-xsmall" style={{ color: b.hue }}>
+                          {b.n}
+                        </span>
                       </div>
-                      <span
-                        className="u-text-mono u-text-style-xsmall"
-                        style={{ color: down ? '#f0736a' : '#6dd39a', textAlign: 'right', flex: 'none' }}
-                      >
-                        {down ? p.status : p.role}
-                      </span>
+                      <div style={{ height: '0.4rem', borderRadius: 999, background: 'var(--swatch--black-300)' }}>
+                        <div
+                          style={{
+                            width: `${(b.n / total) * 100}%`,
+                            height: '100%',
+                            borderRadius: 999,
+                            background: b.hue,
+                          }}
+                        />
+                      </div>
                     </div>
-                  );
-                })}
+                  ));
+                })()}
 
-                <div style={{ borderTop: '1px solid var(--swatch--black-300)', marginTop: '1rem', paddingTop: '1rem' }}>
-                  {Object.entries(health.config).map(([k, v]) => (
-                    <div key={k} className="app_row" style={{ justifyContent: 'space-between', padding: '0.2rem 0' }}>
-                      <span className="u-text-style-xsmall" style={{ opacity: 0.4 }}>
-                        {k.replace(/_/g, ' ')}
-                      </span>
-                      <span className="u-text-mono u-text-style-xsmall app_break" style={{ textAlign: 'right' }}>
-                        {v}
-                      </span>
-                    </div>
-                  ))}
+                <div style={{ borderTop: '1px solid var(--swatch--black-300)', marginTop: '1.4rem', paddingTop: '1.1rem' }}>
+                  <div className="u-text-mono u-text-style-xsmall" style={{ opacity: 0.4, marginBottom: '0.5rem' }}>
+                    JUDGED BY
+                  </div>
+                  <div className="u-text-style-small u-text-trim-off app_break">
+                    {health?.config.compliance_judge ?? '—'}
+                  </div>
+                  <p className="u-text-style-xsmall" style={{ opacity: 0.42, marginTop: '0.7rem' }}>
+                    Dimensions, colour mode and file size are checked deterministically.
+                    Pricing claims, competitor marks and the mobile safe zone are read
+                    from the image itself, with the offending text quoted as evidence.
+                  </p>
                 </div>
               </>
             ) : (
-              <Skeleton h="16rem" />
+              <Skeleton h="14rem" />
             )}
           </div>
         </aside>
