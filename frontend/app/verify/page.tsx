@@ -11,7 +11,7 @@
 import '@/app/app.css';
 
 import { useRef, useState } from 'react';
-import Link from 'next/link';
+import AppNav from '@/components/app/AppNav';
 import LineageTimeline from '@/components/app/LineageTimeline';
 import { ApiError, api, assetSrc, money, type VerifyResult } from '@/lib/api';
 
@@ -52,16 +52,10 @@ export default function VerifyPage() {
 
   return (
     <div className="page_wrap">
-      <header className="app_nav">
-        <div className="app_nav_inner">
-          <Link href="/" className="u-text-style-h5 u-text-trim-off" style={{ color: 'inherit' }}>
-            A+ FOUNDRY
-          </Link>
-          <span className="u-text-mono u-text-style-xsmall" style={{ opacity: 0.45 }}>
-            PUBLIC PROVENANCE CHECK
-          </span>
-        </div>
-      </header>
+      {/* Same bar as the signed-in pages: it shows the full links to a
+          signed-in visitor and falls back to the public header for anyone
+          arriving with just an exported image and no account. */}
+      <AppNav />
 
       <main className="app_main">
         <div className="app_container" style={{ maxWidth: '60rem' }}>

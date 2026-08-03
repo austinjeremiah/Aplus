@@ -12,10 +12,15 @@ Ordering rationale:
                     imagery actually needs.
 2. ``cloudflare`` — Workers AI free tier. Costs nothing, so a live fallback
                     demo is free to run repeatedly.
-3. ``replicate``  — ~$0.003/image. Real money, so it sits last among the
+3. ``hf-*``       — Hugging Face Inference Providers, one slot per routed
+                    vendor (Together, fal-ai, nscale, WaveSpeed). Four
+                    companies behind one token, so these hops cross vendors
+                    and the fallback is a resilience claim rather than a retry.
+4. ``pollinations`` — keyless, so it cannot be knocked out by billing.
+5. ``replicate``  — ~$0.003/image. Real money, so it sits last among the
                     real providers.
-4. ``openai``     — only if a key exists; most expensive.
-5. ``local-mock`` — always appended when nothing else is configured, so the
+6. ``openai``     — only if a key exists; most expensive.
+7. ``local-mock`` — always appended when nothing else is configured, so the
                     pipeline is never a dead end.
 """
 
@@ -98,6 +103,34 @@ def _cloudflare() -> list[ProviderSlot]:
     return slots
 
 
+def _huggingface() -> list[ProviderSlot]:
+    """One slot per Hugging Face inference provider — four vendors, one token.
+
+    Placed above Pollinations deliberately. Every Pollinations slot runs on a
+    single operator's infrastructure, so a chain made only of them fails all
+    the way down at once. Here each slot is a different company, which means
+    every fallback hop crosses an organisational boundary — the only kind of
+    hop that proves anything about resilience.
+
+    Each provider gets its own slot key so circuit-breaking one dead backend
+    leaves the other three usable.
+    """
+    if not settings.hf_api_key:
+        return []
+    from app.services.hf_provider import HuggingFaceImageProvider
+
+    return [
+        ProviderSlot(
+            key=f"hf-{name}",
+            provider=HuggingFaceImageProvider(api_key=settings.hf_api_key, hf_provider=name),
+            model=settings.hf_image_model,
+            est_cost_usd=0.0,
+            wants_dimensions=True,
+        )
+        for name in settings.hf_provider_list
+    ]
+
+
 def _pollinations() -> list[ProviderSlot]:
     """Keyless free tier — the link that cannot run dry.
 
@@ -173,7 +206,7 @@ def simulated_chain() -> tuple[ProviderSlot, ...]:
     )
 
 
-_BUILDERS = (_gmicloud, _cloudflare, _pollinations, _replicate, _openai)
+_BUILDERS = (_gmicloud, _cloudflare, _huggingface, _pollinations, _replicate, _openai)
 
 
 @lru_cache(maxsize=1)

@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
 import { AuthProvider } from '@/components/auth/AuthProvider';
 import Cursor from '@/components/Cursor';
-import GrainOverlay from '@/components/GrainOverlay';
 
 const description =
   'A+ Foundry is the production system behind AI-generated Amazon A+ Content: a real compliance rubric against Amazon rules, multi-provider fallback with full retry lineage, dual Backblaze B2 storage, and provenance anyone can verify. Built with Genblaze on Backblaze B2.';
@@ -41,8 +40,12 @@ export default function RootLayout({
         <link rel="stylesheet" href="/styles/webflow.css" precedence="high" />
         <link rel="stylesheet" href="/styles/inline.css" precedence="high" />
 
+        {/* The template's animated film-grain overlay is deliberately not
+            mounted. It is a fixed, full-viewport layer in color-dodge at the
+            maximum z-index, which lifts black surfaces to a muddy grey and
+            smears every table and small-caps label underneath it. Fine over a
+            marketing hero, wrong over dense operational data. */}
         <Cursor />
-        <GrainOverlay />
 
         <AuthProvider>{children}</AuthProvider>
 

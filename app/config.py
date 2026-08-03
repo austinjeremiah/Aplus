@@ -61,6 +61,28 @@ class Settings(BaseSettings):
     def pollinations_model_list(self) -> list[str]:
         return [m.strip() for m in self.pollinations_models.split(",") if m.strip()]
 
+    # Hugging Face Inference Providers. A broker rather than a host: this one
+    # token routes to four separate companies, so it is what turns the chain
+    # from multi-model into multi-vendor. Pollinations models all run on one
+    # operator and therefore share a failure domain however many are listed.
+    #
+    # Ordered by measured latency on FLUX.1-schnell (together 1.2s, fal-ai
+    # 3.8s), so the common path is the fast one.
+    #
+    # nscale and wavespeed are routable and were verified working, but they
+    # bill against the account's inference credits and start returning 402
+    # once those run out — unlike Together and fal-ai, which stayed free. They
+    # are left out of the default list rather than deleted: on a funded account
+    # they are two more vendors, and adding them back is an env change. Kept in
+    # the chain they would cost a guaranteed failed hop on every single run.
+    hf_api_key: str = ""
+    hf_providers: str = "together,fal-ai"
+    hf_image_model: str = "black-forest-labs/FLUX.1-schnell"
+
+    @property
+    def hf_provider_list(self) -> list[str]:
+        return [p.strip() for p in self.hf_providers.split(",") if p.strip()]
+
     # Providers to leave out of the chain entirely. A provider whose account is
     # unfunded fails on every attempt, and those failures are recorded as
     # reliability data — which misrepresents a billing problem as an outage.
@@ -164,6 +186,8 @@ class Settings(BaseSettings):
             enabled.append("gmicloud")
         if self.cf_account_id and self.cf_api_token:
             enabled.append("cloudflare")
+        if self.hf_api_key:
+            enabled.extend(f"hf-{p}" for p in self.hf_provider_list)
         if self.enable_pollinations:
             enabled.append("pollinations")
         if self.replicate_api_token:

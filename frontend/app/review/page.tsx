@@ -9,10 +9,27 @@
  * passing an unaudited image would be the worst thing this system could do.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import type { CellStyle, ColDef } from 'ag-grid-community';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import AppShell from '@/components/app/AppShell';
+import DataTable, { monoCell } from '@/components/app/DataTable';
 import { ApiError, MODULE_LABELS, api, assetSrc, type Run } from '@/lib/api';
+
+const ROW_HEIGHT = 96;
+
+// Annotated rather than inlined: TypeScript unions the column literals and
+// normalises the result with `display?: undefined`, which CellStyle's
+// `[key: string]: string | number` index signature then rejects.
+const CENTRED: CellStyle = { display: 'flex', alignItems: 'center' };
+const PROVIDER_CELL: CellStyle = { ...monoCell, opacity: 0.7 };
+
+/** The rule that actually blocked the asset, with the judge's quoted evidence. */
+function violationOf(run: Run): { rule: string; evidence: string } {
+  const err = (run.violations ?? []).find((v) => v.severity === 'error');
+  if (err) return { rule: err.rule.replace(/_/g, ' '), evidence: err.evidence };
+  return { rule: 'not audited', evidence: run.compliance?.notes || 'Could not be fully audited.' };
+}
 
 export default function ReviewPage() {
   const [rows, setRows] = useState<Run[] | null>(null);
@@ -34,19 +51,130 @@ export default function ReviewPage() {
 
   useEffect(load, [load]);
 
-  async function decide(run: Run, decision: 'approved' | 'rejected') {
-    const before = rows ?? [];
-    // Optimistic: drop it from the queue immediately, restore if the call fails.
-    setRows(before.filter((r) => r.run_id !== run.run_id));
-    try {
-      await api.review(run.run_id, decision);
-      setToast(`${run.asin} ${decision}`);
-    } catch (e) {
-      setRows(before);
-      setToast(`Couldn't save — ${e instanceof ApiError ? e.message : String(e)}`);
-    }
-    setTimeout(() => setToast(null), 2800);
-  }
+  const decide = useCallback(
+    async (run: Run, decision: 'approved' | 'rejected') => {
+      let restore: Run[] = [];
+      // Optimistic: drop it from the queue immediately, restore if the call fails.
+      setRows((before) => {
+        restore = before ?? [];
+        return restore.filter((r) => r.run_id !== run.run_id);
+      });
+      try {
+        await api.review(run.run_id, decision);
+        setToast(`${run.asin} ${decision}`);
+      } catch (e) {
+        setRows(restore);
+        setToast(`Couldn't save — ${e instanceof ApiError ? e.message : String(e)}`);
+      }
+      setTimeout(() => setToast(null), 2800);
+    },
+    [],
+  );
+
+  const columns = useMemo<ColDef<Run>[]>(
+    () => [
+      {
+        headerName: '',
+        maxWidth: 96,
+        sortable: false,
+        cellStyle: CENTRED,
+        cellRenderer: (p: { data: Run }) => (
+          <Link href={`/runs/${p.data.run_id}`}>
+            {p.data.asset_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={assetSrc(p.data.asset_url)} alt="" className="app_thumb" loading="lazy" />
+            ) : (
+              <div className="app_thumb" />
+            )}
+          </Link>
+        ),
+      },
+      {
+        field: 'asin',
+        headerName: 'ASIN',
+        flex: 1.4,
+        minWidth: 180,
+        cellRenderer: (p: { data: Run }) => (
+          <div style={{ lineHeight: 1.45 }}>
+            <Link href={`/runs/${p.data.run_id}`} style={{ fontFamily: 'Suisse Mono, monospace', fontSize: 13 }}>
+              {p.data.asin}
+            </Link>
+            <div style={{ opacity: 0.5, fontSize: 12 }}>
+              {MODULE_LABELS[p.data.module_id] ?? p.data.module_id}
+            </div>
+          </div>
+        ),
+      },
+      {
+        field: 'provider',
+        headerName: 'Provider',
+        flex: 1,
+        minWidth: 150,
+        // Was rendered at 0.32 opacity and effectively unreadable on black.
+        cellStyle: PROVIDER_CELL,
+        valueFormatter: (p) => p.value ?? '—',
+      },
+      {
+        headerName: 'Why it stopped',
+        flex: 3,
+        minWidth: 300,
+        sortable: false,
+        valueGetter: (p) => (p.data ? violationOf(p.data).rule : ''),
+        cellRenderer: (p: { data: Run }) => {
+          const v = violationOf(p.data);
+          return (
+            <div style={{ lineHeight: 1.45, paddingTop: 2 }}>
+              <div
+                className="u-text-mono"
+                style={{ fontSize: 11, color: '#f0736a', letterSpacing: '0.04em' }}
+              >
+                {v.rule.toUpperCase()}
+              </div>
+              {/* Clamped to two lines rather than truncated mid-word by the
+                  cell edge; the run page carries the full text. */}
+              <div
+                style={{
+                  fontSize: 13,
+                  opacity: 0.8,
+                  display: '-webkit-box',
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: 'vertical',
+                  overflow: 'hidden',
+                }}
+                title={v.evidence}
+              >
+                {v.evidence}
+              </div>
+            </div>
+          );
+        },
+      },
+      {
+        headerName: '',
+        flex: 1.2,
+        minWidth: 210,
+        sortable: false,
+        cellStyle: CENTRED,
+        cellRenderer: (p: { data: Run }) => (
+          <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', fontSize: 13 }}>
+            <button onClick={() => decide(p.data, 'approved')} style={{ color: '#6dd39a' }}>
+              Approve
+            </button>
+            <button onClick={() => decide(p.data, 'rejected')} style={{ color: '#f0736a' }}>
+              Reject
+            </button>
+            <Link
+              href={`/generate?asin=${encodeURIComponent(p.data.asin)}&module_id=${p.data.module_id}`}
+              style={{ opacity: 0.5 }}
+            >
+              Regenerate
+            </Link>
+          </div>
+        ),
+      },
+    ],
+    [decide],
+  );
 
   return (
     <AppShell>
@@ -72,96 +200,12 @@ export default function ReviewPage() {
         </div>
       ) : null}
 
-      {rows === null ? (
-        <div className="app_panel">
-          {[0, 1, 2].map((i) => (
-            <div key={i} className="app_skeleton" style={{ height: '3rem', marginBottom: '0.8rem' }} />
-          ))}
-        </div>
-      ) : rows.length === 0 ? (
-        <div className="app_empty">
-          <div className="u-text-style-h5 u-text-trim-off">Nothing needs review</div>
-          <p className="u-text-style-main" style={{ opacity: 0.5, maxWidth: '38ch', margin: '0.9rem auto 0' }}>
-            Every generated asset either passed the rubric or has already been decided on.
-          </p>
-        </div>
-      ) : (
-        <div className="app_panel is-flush">
-          <table className="app_table u-text-style-small">
-            <tbody>
-              {rows.map((r) => {
-                const errs = (r.violations ?? []).filter((v) => v.severity === 'error');
-                return (
-                  <tr key={r.run_id}>
-                    <td style={{ width: '5rem' }}>
-                      <Link href={`/runs/${r.run_id}`}>
-                        {r.asset_url ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={assetSrc(r.asset_url)} alt="" className="app_thumb" loading="lazy" />
-                        ) : (
-                          <div className="app_thumb" />
-                        )}
-                      </Link>
-                    </td>
-                    <td style={{ minWidth: '9rem' }}>
-                      <Link href={`/runs/${r.run_id}`}>{r.asin}</Link>
-                      <div className="u-text-style-xsmall" style={{ opacity: 0.45 }}>
-                        {MODULE_LABELS[r.module_id] ?? r.module_id}
-                      </div>
-                      <div className="u-text-mono u-text-style-xsmall" style={{ opacity: 0.32 }}>
-                        {r.provider ?? '—'}
-                      </div>
-                    </td>
-                    <td style={{ maxWidth: '26rem' }}>
-                      {errs.length ? (
-                        <ul className="app_violations" style={{ margin: 0 }}>
-                          {errs.map((v, i) => (
-                            <li key={i}>
-                              <span className="u-text-mono u-text-style-xsmall">
-                                {v.rule.replace(/_/g, ' ')}
-                              </span>
-                              <span className="u-text-style-small">{v.evidence}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <span className="u-text-style-small" style={{ opacity: 0.45 }}>
-                          {r.compliance?.notes || 'Could not be fully audited.'}
-                        </span>
-                      )}
-                    </td>
-                    <td style={{ width: '15rem' }}>
-                      <div className="app_row" style={{ gap: '1rem' }}>
-                        <button
-                          onClick={() => decide(r, 'approved')}
-                          className="u-text-style-small"
-                          style={{ color: '#6dd39a', textDecoration: 'underline' }}
-                        >
-                          Approve
-                        </button>
-                        <button
-                          onClick={() => decide(r, 'rejected')}
-                          className="u-text-style-small"
-                          style={{ color: '#f0736a', textDecoration: 'underline' }}
-                        >
-                          Reject
-                        </button>
-                        <Link
-                          href={`/generate?asin=${encodeURIComponent(r.asin)}&module_id=${r.module_id}`}
-                          className="u-text-style-small"
-                          style={{ opacity: 0.5, textDecoration: 'underline' }}
-                        >
-                          Regenerate
-                        </Link>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <DataTable
+        rows={rows}
+        columns={columns}
+        emptyMessage="Nothing needs review"
+        gridOptions={{ rowHeight: ROW_HEIGHT }}
+      />
 
       {toast ? <div className="app_toast u-text-style-small">{toast}</div> : null}
     </AppShell>

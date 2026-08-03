@@ -9,9 +9,18 @@
  * "the endpoint was down" are different failures with different fixes.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import type { ColDef } from 'ag-grid-community';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import AppShell from '@/components/app/AppShell';
+import DataTable, { monoCell } from '@/components/app/DataTable';
 import { ApiError, api, money, type Stats } from '@/lib/api';
+
+type ProviderRow = Stats['per_provider'][number];
+type AsinRow = Stats['cost_per_asin'][number];
+
+const PASS = '#6dd39a';
+const FAIL = '#f0736a';
+const WARN = '#e5b552';
 
 function Stat({ label, value, hint }: { label: string; value: React.ReactNode; hint?: string }) {
   return (
@@ -29,6 +38,13 @@ function Stat({ label, value, hint }: { label: string; value: React.ReactNode; h
   );
 }
 
+/** Zero counts are dimmed so a non-zero one is findable by eye alone. */
+function count(colour: string) {
+  return (p: { value: number }) => (
+    <span style={{ color: p.value ? colour : 'inherit', opacity: p.value ? 1 : 0.25 }}>{p.value}</span>
+  );
+}
+
 export default function AnalyticsPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -39,8 +55,50 @@ export default function AnalyticsPage() {
 
   useEffect(load, [load]);
 
-  const maxAttempts = Math.max(...(stats?.per_provider ?? []).map((p) => p.attempts), 1);
-  const maxCost = Math.max(...(stats?.cost_per_asin ?? []).map((c) => c.cost_usd), 0.0001);
+  const providerCols = useMemo<ColDef<ProviderRow>[]>(
+    () => [
+      { field: 'provider', headerName: 'Provider', flex: 2, minWidth: 190, cellStyle: monoCell },
+      { field: 'attempts', headerName: 'Attempts', maxWidth: 130 },
+      { field: 'passed', headerName: 'Passed', maxWidth: 120, cellRenderer: count(PASS) },
+      { field: 'failed', headerName: 'Rejected', maxWidth: 130, cellRenderer: count(FAIL) },
+      { field: 'errors', headerName: 'Errors', maxWidth: 120, cellRenderer: count(WARN) },
+      {
+        field: 'pass_rate',
+        headerName: 'Pass rate',
+        maxWidth: 150,
+        // Null is not zero here: it means the provider never reached the
+        // rubric at all, so a percentage would be a fabricated verdict.
+        cellRenderer: (p: { value: number | null }) =>
+          p.value == null ? (
+            <span style={{ opacity: 0.3 }}>never judged</span>
+          ) : (
+            `${Math.round(p.value * 100)}%`
+          ),
+      },
+      {
+        field: 'cost_usd',
+        headerName: 'Spend',
+        maxWidth: 130,
+        cellRenderer: (p: { value: number }) => money(p.value),
+      },
+    ],
+    [],
+  );
+
+  const asinCols = useMemo<ColDef<AsinRow>[]>(
+    () => [
+      { field: 'asin', headerName: 'ASIN', flex: 2, minWidth: 170, cellStyle: monoCell },
+      {
+        field: 'cost_usd',
+        headerName: 'Spend',
+        maxWidth: 160,
+        cellRenderer: (p: { value: number }) => money(p.value),
+      },
+    ],
+    [],
+  );
+
+  const freeChain = !!stats && stats.total_cost_usd === 0 && stats.total_runs > 0;
 
   return (
     <AppShell>
@@ -71,7 +129,11 @@ export default function AnalyticsPage() {
           <>
             <Stat label="TOTAL RUNS" value={stats.total_runs} />
             <Stat label="ASINS" value={stats.total_asins} />
-            <Stat label="TOTAL SPEND" value={money(stats.total_cost_usd)} hint="across every attempt" />
+            <Stat
+              label="TOTAL SPEND"
+              value={money(stats.total_cost_usd)}
+              hint={freeChain ? 'entire chain is free-tier' : 'across every attempt'}
+            />
             <Stat
               label="PASS RATE"
               value={stats.overall_pass_rate == null ? '—' : `${Math.round(stats.overall_pass_rate * 100)}%`}
@@ -88,70 +150,30 @@ export default function AnalyticsPage() {
 
       <section className="app_section">
         <h2 className="u-text-style-h4 u-text-trim-off">Provider reliability</h2>
-        <p className="u-text-style-small" style={{ opacity: 0.45, margin: '0.6rem 0 1.5rem' }}>
+        <p className="u-text-style-small u-max-width-60ch" style={{ opacity: 0.45, margin: '0.6rem 0 1.5rem' }}>
           Pass rate counts only attempts that reached the rubric — an outage is never mistaken
-          for a policy failure.
+          for a policy failure. Sort any column to compare.
         </p>
-        <div className="app_panel is-flush">
-          <table className="app_table u-text-style-small">
-            <thead>
-              <tr className="u-text-mono u-text-style-xsmall">
-                <th>Provider</th>
-                <th style={{ minWidth: '10rem' }}>Attempts</th>
-                <th>Passed</th>
-                <th>Rejected</th>
-                <th>Errors</th>
-                <th>Pass rate</th>
-                <th>Spend</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(stats?.per_provider ?? []).map((p) => (
-                <tr key={p.provider}>
-                  <td className="u-text-mono">{p.provider}</td>
-                  <td>
-                    <div className="app_row" style={{ flexWrap: 'nowrap', gap: '0.7rem' }}>
-                      <span style={{ minWidth: '1.5rem' }}>{p.attempts}</span>
-                      <span className="app_bar">
-                        <span style={{ width: `${(p.attempts / maxAttempts) * 100}%` }} />
-                      </span>
-                    </div>
-                  </td>
-                  <td style={{ color: '#6dd39a' }}>{p.passed}</td>
-                  <td style={{ color: '#f0736a' }}>{p.failed}</td>
-                  <td style={{ color: p.errors ? '#e5b552' : 'inherit' }}>{p.errors}</td>
-                  <td>
-                    {p.pass_rate == null ? (
-                      <span style={{ opacity: 0.35 }}>never judged</span>
-                    ) : (
-                      `${Math.round(p.pass_rate * 100)}%`
-                    )}
-                  </td>
-                  <td>{money(p.cost_usd)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DataTable
+          rows={stats?.per_provider ?? null}
+          columns={providerCols}
+          emptyMessage="No provider attempts recorded yet"
+        />
       </section>
 
       <section className="app_section">
-        <h2 className="u-text-style-h4 u-text-trim-off">Cost per ASIN</h2>
-        <div className="app_panel" style={{ marginTop: '1.4rem' }}>
-          {(stats?.cost_per_asin ?? []).slice(0, 12).map((c) => (
-            <div className="app_row" key={c.asin} style={{ flexWrap: 'nowrap', padding: '0.5rem 0' }}>
-              <span className="u-text-mono u-text-style-xsmall" style={{ minWidth: '8rem' }}>
-                {c.asin}
-              </span>
-              <span className="app_bar" style={{ flex: 1 }}>
-                <span style={{ width: `${(c.cost_usd / maxCost) * 100}%` }} />
-              </span>
-              <span className="u-text-mono u-text-style-xsmall" style={{ minWidth: '4rem', textAlign: 'right' }}>
-                {money(c.cost_usd)}
-              </span>
-            </div>
-          ))}
-        </div>
+        <h2 className="u-text-style-h4 u-text-trim-off">Spend by ASIN</h2>
+        <p className="u-text-style-small u-max-width-60ch" style={{ opacity: 0.45, margin: '0.6rem 0 1.5rem' }}>
+          {freeChain
+            ? 'Every provider currently in the chain runs on a free tier, so real metered spend is $0.00 — the column is populated from what each provider actually reported, not estimated, so a paid provider entering the chain shows up here immediately.'
+            : 'Metered from what each provider reported on the attempt, summed across every retry for that ASIN.'}
+        </p>
+        <DataTable
+          rows={stats?.cost_per_asin ?? null}
+          columns={asinCols}
+          emptyMessage="No spend recorded yet"
+          height={360}
+        />
       </section>
 
       <section className="app_section">

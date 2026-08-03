@@ -15,3 +15,4 @@ pyarrow
 httpx
 arq
 redis
+huggingface_hub
