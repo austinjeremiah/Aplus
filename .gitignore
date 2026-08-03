@@ -41,3 +41,4 @@ Thumbs.db
 frontend/.next/
 frontend/out/
 frontend/.env.local
+frontend/.env.local

@@ -1,20 +1,22 @@
 import type { Metadata } from 'next';
-import { AuthProvider } from '@/components/app/auth';
+import { AuthProvider } from '@/components/auth/AuthProvider';
+import Cursor from '@/components/Cursor';
+import GrainOverlay from '@/components/GrainOverlay';
 
 const description =
-  'A++ is a compliance and governance system for Amazon A+ Content image generation. A real rubric against Amazon rules, multi-provider fallback with full retry lineage, dual Backblaze B2 storage, and a public provenance verify page. Built on Genblaze + Backblaze B2.';
+  'A+ Foundry is the production system behind AI-generated Amazon A+ Content: a real compliance rubric against Amazon rules, multi-provider fallback with full retry lineage, dual Backblaze B2 storage, and provenance anyone can verify. Built with Genblaze on Backblaze B2.';
 
 export const metadata: Metadata = {
-  title: 'A++ | Compliance & Provenance for Amazon A+ Content',
+  title: 'A+ Foundry | Compliance & Provenance for Amazon A+ Content',
   description,
   openGraph: {
-    title: 'A++ | Compliance & Provenance for Amazon A+ Content',
+    title: 'A+ Foundry | Compliance & Provenance for Amazon A+ Content',
     description,
     type: 'website',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'A++ | Compliance & Provenance for Amazon A+ Content',
+    title: 'A+ Foundry | Compliance & Provenance for Amazon A+ Content',
     description,
   },
 };
@@ -39,6 +41,8 @@ export default function RootLayout({
         <link rel="stylesheet" href="/styles/webflow.css" precedence="high" />
         <link rel="stylesheet" href="/styles/inline.css" precedence="high" />
 
+        <Cursor />
+        <GrainOverlay />
 
         <AuthProvider>{children}</AuthProvider>
 
